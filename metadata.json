@@ -1,0 +1,6 @@
+{
+  "name": "SHIV INFRA AI",
+  "description": "Enterprise Construction ERP + CRM + AI SaaS Dashboard Platform",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

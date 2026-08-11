@@ -1,0 +1,1283 @@
+// ============================================
+// SHIVINFRA AI RESPONSE SERVICE V6
+// PRODUCTION RESPONSE ENGINE
+// PART 1 / 2
+// ============================================
+
+
+class AIResponseService {
+
+
+
+// ============================================
+// MAIN RESPONSE GENERATOR
+// ============================================
+
+
+static generate(
+
+intent:string,
+
+actionResult:any
+
+){
+
+
+
+if(!actionResult){
+
+
+return {
+
+response:
+
+"🤖 SHIVINFRA AI ready आहे. मी Projects, Customers, Leads, Expenses, Bills आणि Reports manage करू शकतो."
+
+};
+
+
+}
+
+
+
+
+if(actionResult.success === false){
+
+
+return {
+
+response:
+
+`❌ Request Failed
+
+${actionResult.message || "Unable to complete request."}
+
+🤖 SHIVINFRA AI`
+
+};
+
+
+}
+
+
+
+
+
+const data =
+
+actionResult.data?.data ||
+
+actionResult.data ||
+
+{};
+
+
+
+
+switch(intent){
+
+
+
+// ===============================
+// PROJECT
+// ===============================
+
+
+case "ADD_PROJECT":
+
+return {
+
+response:
+
+`✅ Project Created Successfully
+
+🏢 Project:
+${data.project_name || "N/A"}
+
+📍 Location:
+${data.city || data.location || "N/A"}
+
+🏗 Type:
+${data.project_type || "Residential"}
+
+💰 Price:
+${this.formatMoney(data.price)}
+
+📌 Status:
+${data.status || "Active"}
+
+🤖 SHIVINFRA AI`
+
+};
+
+
+
+
+
+case "UPDATE_PROJECT":
+
+return {
+
+response:
+
+`✅ Project Updated Successfully
+
+🏢 Project:
+${data.project_name || "N/A"}
+
+📍 Location:
+${data.city || data.location || "N/A"}
+
+💰 Price:
+${this.formatMoney(data.price)}
+
+📌 Status:
+${data.status || "Updated"}
+
+🤖 SHIVINFRA AI`
+
+};
+
+
+
+
+
+case "DELETE_PROJECT":
+
+return {
+
+response:
+
+`🗑 Project Deleted Successfully
+
+🏢 Project:
+${data.project_name || "Selected Project"}
+
+🤖 SHIVINFRA AI`
+
+};
+
+
+
+
+
+
+case "SEARCH_PROJECTS":
+
+return {
+
+response:
+
+this.formatProjects(data)
+
+};
+
+
+
+
+
+
+// ===============================
+// CUSTOMER
+// ===============================
+
+
+case "ADD_CUSTOMER":
+
+return {
+
+response:
+
+`✅ Customer Added Successfully
+
+👤 Name:
+${data.full_name || "N/A"}
+
+📞 Phone:
+${data.phone || "N/A"}
+
+📍 City:
+${data.city || "N/A"}
+
+💰 Budget:
+${this.formatMoney(data.budget)}
+
+🤖 Source:
+SHIVINFRA AI`
+
+};
+
+
+
+
+
+
+case "UPDATE_CUSTOMER":
+
+return {
+
+response:
+
+`✅ Customer Updated Successfully
+
+👤 Name:
+${data.full_name || "N/A"}
+
+📞 Phone:
+${data.phone || "N/A"}
+
+📍 City:
+${data.city || "N/A"}
+
+🤖 SHIVINFRA AI`
+
+};
+
+
+
+
+
+
+case "DELETE_CUSTOMER":
+
+return {
+
+response:
+
+`🗑 Customer Deleted Successfully
+
+👤 Customer:
+${data.full_name || "Selected Customer"}
+
+🤖 SHIVINFRA AI`
+
+};
+
+
+
+
+
+
+case "SEARCH_CUSTOMERS":
+
+return {
+
+response:
+
+this.formatCustomers(data)
+
+};
+
+
+
+
+
+
+
+
+// ===============================
+// LEAD
+// ===============================
+
+
+case "ADD_LEAD":
+
+return {
+
+response:
+
+`✅ New Lead Created
+
+👤 Customer:
+${data.customer_name || "N/A"}
+
+📌 Requirement:
+${data.requirement || "N/A"}
+
+📍 Location:
+${data.preferred_location || "N/A"}
+
+💰 Budget:
+${this.formatMoney(data.budget)}
+
+📌 Status:
+${data.status || "New"}
+
+🤖 SHIVINFRA AI`
+
+};
+
+
+
+
+
+
+
+case "UPDATE_LEAD":
+
+return {
+
+response:
+
+`✅ Lead Updated Successfully
+
+📌 Requirement:
+${data.requirement || "N/A"}
+
+📌 Status:
+${data.status || "Updated"}
+
+🤖 SHIVINFRA AI`
+
+};
+
+
+
+
+
+
+
+case "DELETE_LEAD":
+
+return {
+
+response:
+
+`🗑 Lead Deleted Successfully
+
+ID:
+${data.id || "N/A"}
+
+🤖 SHIVINFRA AI`
+
+};
+
+
+
+
+
+
+
+case "SEARCH_LEADS":
+
+return {
+
+response:
+
+this.formatLeads(data)
+
+};
+
+
+
+
+
+
+
+
+// ===============================
+// EXPENSE
+// ===============================
+
+
+case "ADD_EXPENSE":
+
+return {
+
+response:
+
+`✅ Expense Added Successfully
+
+📝 Title:
+${data.expense_title || "N/A"}
+
+💰 Amount:
+${this.formatMoney(data.amount)}
+
+📂 Category:
+${data.expense_category || data.category || "General"}
+
+🤖 SHIVINFRA AI`
+
+};
+
+
+
+
+
+
+case "UPDATE_EXPENSE":
+
+return {
+
+response:
+
+`✅ Expense Updated Successfully
+
+📝 Title:
+${data.expense_title || "N/A"}
+
+💰 Amount:
+${this.formatMoney(data.amount)}
+
+🤖 SHIVINFRA AI`
+
+};
+
+
+
+
+
+
+case "DELETE_EXPENSE":
+
+return {
+
+response:
+
+`🗑 Expense Deleted Successfully
+
+ID:
+${data.id || "N/A"}
+
+🤖 SHIVINFRA AI`
+
+};
+
+
+
+
+
+
+case "SEARCH_EXPENSES":
+
+return {
+
+response:
+
+this.formatExpenses(data)
+
+};
+
+
+
+// ============================================
+// BILL MODULE
+// ============================================
+
+
+case "UPLOAD_BILL":
+
+return {
+
+response:
+
+`✅ Bill Uploaded Successfully
+
+
+🏢 Supplier:
+${data.supplier || "N/A"}
+
+
+🧾 Bill Number:
+${data.bill_number || "N/A"}
+
+
+💰 Amount:
+${this.formatMoney(
+data.total_amount || data.amount
+)}
+
+
+📅 Date:
+${data.bill_date || "N/A"}
+
+
+📌 Status:
+${data.status || "Pending"}
+
+
+🤖 Uploaded By:
+SHIVINFRA AI`
+
+};
+
+
+
+
+
+
+// ============================================
+// REPORT MODULE
+// ============================================
+
+
+case "GENERATE_REPORT":
+
+return {
+
+response:
+
+`📊 Report Generation Started
+
+
+📄 Report Type:
+${data.report_type || "Monthly"}
+
+
+📁 Format:
+${(
+data.format || "PDF"
+).toUpperCase()}
+
+
+🚀 Status:
+${data.status || "Processing"}
+
+
+🤖 Generated By:
+SHIVINFRA AI
+
+
+⏳ Report will be available soon.`
+
+};
+
+
+
+
+
+
+
+// ============================================
+// SITE VISIT MODULE
+// ============================================
+
+
+case "BOOK_SITE_VISIT":
+
+return {
+
+response:
+
+`✅ Site Visit Scheduled
+
+
+👤 Customer:
+${data.customer_name || "N/A"}
+
+
+🏢 Project:
+${data.project_name || data.project || "N/A"}
+
+
+📅 Date:
+${data.preferred_date || "To be confirmed"}
+
+
+📞 Phone:
+${data.phone || "N/A"}
+
+
+🤖 Managed By:
+SHIVINFRA AI`
+
+};
+
+
+
+
+
+
+
+// ============================================
+// BROCHURE
+// ============================================
+
+
+case "SEND_BROCHURE":
+
+return {
+
+response:
+
+`📄 Brochure Request Received
+
+
+🏢 Project:
+${data.project_name || data.project || "N/A"}
+
+
+✅ Brochure will be shared shortly.
+
+
+🤖 SHIVINFRA AI`
+
+};
+
+
+
+
+
+
+
+
+// ============================================
+// PROJECT IMAGES
+// ============================================
+
+
+case "SEND_PROJECT_IMAGES":
+
+return {
+
+response:
+
+`🖼 Project Images Request
+
+
+🏢 Project:
+${data.project_name || data.project || "N/A"}
+
+
+✅ Project gallery will be shared shortly.
+
+
+🤖 SHIVINFRA AI`
+
+};
+
+
+
+
+
+
+
+
+// ============================================
+// BROADCAST
+// ============================================
+
+
+case "CREATE_BROADCAST":
+
+return {
+
+response:
+
+`📢 Broadcast Created Successfully
+
+
+💬 Message:
+
+${data.message || "N/A"}
+
+
+📲 Channel:
+
+WHATSAPP
+
+
+🤖 Created By:
+
+SHIVINFRA AI`
+
+};
+
+
+
+
+
+
+
+
+// ============================================
+// GENERAL CHAT
+// ============================================
+
+
+case "GENERAL_CHAT":
+
+return {
+
+response:
+
+data.reply ||
+
+`🤖 SHIVINFRA AI Ready आहे.
+
+
+मी खालील काम करू शकतो:
+
+
+🏢 Projects
+
+👥 Customers
+
+📋 Leads
+
+💰 Expenses
+
+🧾 Bills
+
+📊 Reports
+
+📲 WhatsApp Automation`
+
+};
+
+
+
+
+
+
+
+// ============================================
+// DEFAULT
+// ============================================
+
+
+default:
+
+return {
+
+response:
+
+`✅ Task Completed Successfully
+
+
+${
+actionResult.message ||
+"SHIVINFRA AI completed your request."
+}`
+
+};
+
+
+
+
+
+}
+
+}
+
+
+// ============================================
+// MONEY FORMATTER
+// ============================================
+
+
+private static formatMoney(
+
+amount:any
+
+){
+
+
+if(
+
+amount === null ||
+
+amount === undefined ||
+
+amount === ""
+
+){
+
+return "₹0";
+
+}
+
+
+
+
+const value = Number(amount);
+
+
+
+if(isNaN(value))
+
+return "₹0";
+
+
+
+
+
+return (
+
+"₹" +
+
+value.toLocaleString(
+
+"en-IN"
+
+)
+
+);
+
+
+}
+
+
+
+
+
+
+
+
+// ============================================
+// PROJECT LIST FORMAT
+// ============================================
+
+
+private static formatProjects(
+
+projects:any
+
+){
+
+
+if(
+
+!Array.isArray(projects) ||
+
+projects.length===0
+
+)
+
+return "❌ No projects found.";
+
+
+
+
+
+let text =
+
+`🏢 SHIVINFRA PROJECTS\n\n`;
+
+
+
+
+
+projects.slice(0,10)
+
+.forEach(
+
+(project:any,index:number)=>{
+
+
+text +=
+
+
+`${index+1}. ${
+project.project_name || "Project"
+}
+
+
+📍 Location:
+${
+project.city ||
+project.location ||
+"N/A"
+}
+
+
+💰 Price:
+${this.formatMoney(project.price)}
+
+
+📌 Status:
+${project.status || "Active"}
+
+
+----------------\n\n`;
+
+
+
+}
+
+);
+
+
+
+return text;
+
+
+}
+
+
+
+
+
+
+
+
+// ============================================
+// CUSTOMER LIST FORMAT
+// ============================================
+
+
+private static formatCustomers(
+
+customers:any
+
+){
+
+
+if(
+
+!Array.isArray(customers) ||
+
+customers.length===0
+
+)
+
+return "❌ No customers found.";
+
+
+
+
+
+let text =
+
+`👥 SHIVINFRA CUSTOMERS\n\n`;
+
+
+
+
+
+customers.slice(0,10)
+
+.forEach(
+
+(customer:any,index:number)=>{
+
+
+text +=
+
+
+`${index+1}. ${
+customer.full_name || "Customer"
+}
+
+
+📞 Phone:
+${customer.phone || "N/A"}
+
+
+📍 City:
+${customer.city || "N/A"}
+
+
+💰 Budget:
+${this.formatMoney(customer.budget)}
+
+
+----------------\n\n`;
+
+
+
+}
+
+);
+
+
+
+return text;
+
+
+}
+
+
+
+
+
+
+
+
+// ============================================
+// LEAD LIST FORMAT
+// ============================================
+
+
+private static formatLeads(
+
+leads:any
+
+){
+
+
+if(
+
+!Array.isArray(leads) ||
+
+leads.length===0
+
+)
+
+return "❌ No leads found.";
+
+
+
+
+
+let text =
+
+`📋 SHIVINFRA LEADS\n\n`;
+
+
+
+
+
+leads.slice(0,10)
+
+.forEach(
+
+(lead:any,index:number)=>{
+
+
+text +=
+
+
+`${index+1}. ${
+lead.customer_name || "Lead"
+}
+
+
+📌 Requirement:
+${lead.requirement || "N/A"}
+
+
+📍 Location:
+${lead.preferred_location || "N/A"}
+
+
+💰 Budget:
+${this.formatMoney(lead.budget)}
+
+
+📌 Status:
+${lead.status || "New"}
+
+
+----------------\n\n`;
+
+
+
+}
+
+);
+
+
+
+return text;
+
+
+}
+
+
+
+
+
+
+
+
+// ============================================
+// EXPENSE LIST FORMAT
+// ============================================
+
+
+private static formatExpenses(
+
+expenses:any
+
+){
+
+
+if(
+
+!Array.isArray(expenses) ||
+
+expenses.length===0
+
+)
+
+return "❌ No expenses found.";
+
+
+
+
+
+let text =
+
+`💰 SHIVINFRA EXPENSES\n\n`;
+
+
+
+
+
+expenses.slice(0,10)
+
+.forEach(
+
+(expense:any,index:number)=>{
+
+
+text +=
+
+
+`${index+1}. ${
+expense.expense_title || "Expense"
+}
+
+
+💰 Amount:
+${this.formatMoney(expense.amount)}
+
+
+📂 Category:
+${expense.expense_category || "General"}
+
+
+📅 Date:
+${expense.expense_date || "N/A"}
+
+
+----------------\n\n`;
+
+
+
+}
+
+);
+
+
+
+return text;
+
+
+}
+
+
+
+
+
+
+
+
+// ============================================
+// WHATSAPP FORMAT
+// ============================================
+
+
+static whatsappResponse(
+
+intent:string,
+
+response:string
+
+){
+
+
+return {
+
+
+channel:"WHATSAPP",
+
+
+bot:"SHIVINFRA AI",
+
+
+intent,
+
+
+message:response,
+
+
+timestamp:
+
+new Date().toISOString()
+
+
+
+};
+
+
+}
+
+
+
+
+
+
+
+
+// ============================================
+// HEALTH
+// ============================================
+
+
+static health(){
+
+
+return {
+
+
+service:
+
+"SHIVINFRA AI RESPONSE SERVICE",
+
+
+version:
+
+"V6",
+
+
+status:
+
+"RUNNING",
+
+
+features:[
+
+
+"ERP Response Engine",
+
+"Project Response",
+
+"Customer Response",
+
+"Lead Response",
+
+"Expense Response",
+
+"Bill Response",
+
+"Report Response",
+
+"WhatsApp Response",
+
+"Broadcast Response"
+
+
+]
+
+
+};
+
+
+}
+
+
+}
+
+
+
+
+
+// ============================================
+// EXPORT
+// ============================================
+
+
+export default AIResponseService;
