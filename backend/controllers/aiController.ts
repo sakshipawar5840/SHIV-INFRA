@@ -1,4 +1,4 @@
-// =====================================================
+﻿// =====================================================
 // SHIVINFRA AI CONTROLLER V15
 // FINAL CLEAN PRODUCTION VERSION
 // PART 1 / 3
@@ -26,8 +26,6 @@ import AIService from "../services/aiService.ts";
 import AIActionService from "../services/aiActionService.ts";
 
 import AIResponseService from "../services/aiResponseService.ts";
-
-import memoryService from "../services/memoryService.ts";
 
 import { runAgent, AgentRequest } from "../ai-engine/agent";
 
@@ -73,7 +71,9 @@ interface AIUserContext {
     |
     "ENGINEER"
     |
-    "CUSTOMER";
+    "CUSTOMER"
+    |
+    "SALES";
 
 
     channel:
@@ -483,7 +483,7 @@ export const aiChat = async(
 
         console.log(
 
-            "🤖 SHIVINFRA AI REQUEST",
+            "ðŸ¤– SHIVINFRA AI REQUEST",
 
             {
 
@@ -798,7 +798,7 @@ export const detectAIIntent = async(
 
         console.log(
 
-            "🧠 INTENT REQUEST",
+            "ðŸ§  INTENT REQUEST",
 
             {
 
@@ -1358,7 +1358,7 @@ export const whatsappAIHandler = async(
 
         console.log(
 
-            "📱 WHATSAPP AI MESSAGE",
+            "ðŸ“± WHATSAPP AI MESSAGE",
 
             {
 
@@ -1507,7 +1507,7 @@ export const whatsappAIHandler = async(
                 response:
 
 
-                "⚠ This action requires admin access."
+                "âš  This action requires admin access."
 
 
 
@@ -1896,7 +1896,7 @@ export const simpleAIChat = async(
 
         console.log(
 
-            "💬 SIMPLE AI CHAT",
+            "ðŸ’¬ SIMPLE AI CHAT",
 
             {
 
@@ -2370,7 +2370,23 @@ export const aiHealth = async(
 
             actionHealth =
 
-            AIActionService.health();
+            typeof AIActionService.health ===
+            "function"
+
+                ?
+            AIActionService.health()
+
+                :
+
+                {
+
+                    status:
+                        "ACTIVE",
+
+                    service:
+                        "SHIVINFRA AI ACTION SERVICE"
+
+                };
 
 
 

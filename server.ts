@@ -22,6 +22,8 @@ import morgan from "morgan";
 
 import { createServer as createViteServer } from "vite";
 
+import { startFollowUpScheduler, stopFollowUpScheduler } from "./backend/services/followUpService.ts";
+
 
 
 
@@ -76,39 +78,37 @@ contentSecurityPolicy:false
 
 
 
+const isProduction = process.env.NODE_ENV === "production";
+
+const allowedOrigins = isProduction
+    ? [process.env.FRONTEND_URL].filter(Boolean)
+    : [
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:3000",
+      ];
+
 app.use(
-
-cors({
-
-origin:"*",
-
-
-methods:[
-
-"GET",
-
-"POST",
-
-"PUT",
-
-"PATCH",
-
-"DELETE"
-
-],
-
-
-
-allowedHeaders:[
-
-"Content-Type",
-
-"Authorization"
-
-]
-
-})
-
+    cors({
+        origin: (origin, callback) => {
+            if (!origin || allowedOrigins.includes(origin)) {
+                return callback(null, true);
+            }
+            return callback(new Error("Not allowed by CORS"), false);
+        },
+        methods: [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+            "OPTIONS",
+        ],
+        allowedHeaders: [
+            "Content-Type",
+            "Authorization",
+        ],
+    })
 );
 
 
@@ -142,14 +142,58 @@ morgan(
 // BODY PARSER
 
 
+// BODY PARSER (tolerant for the Meta webhook)
+//
+// Meta retries on ANY non-200 response, so the WhatsApp webhook endpoint must
+// ALWAYS acknowledge with 200 OK, even when the JSON body is malformed or the
+// shape is unexpected. A body-parse failure is logged separately but never
+// allowed to propagate to the HTTP response. Other routes keep default 500
+// behavior on bad JSON.
 app.use(
+    (req: any, res: any, next: any) => {
 
-express.json({
+        const isWebhook =
+            req.path === "/api/v1/whatsapp/webhook" ||
+            String(req.originalUrl || "").includes("/whatsapp/webhook");
 
-limit:"50mb"
+        const parser = express.json({
+            limit: "50mb",
+            verify: (request: any, _res: any, buf: Buffer) => {
+                // Preserve raw body for Meta webhook signature verification
+                if (buf && buf.length) {
+                    request.rawBody = buf;
+                }
+            }
+        });
 
-})
+        parser(req, res, (err: any) => {
 
+            if (err) {
+
+                if (isWebhook) {
+
+                    console.error(
+                        "[WEBHOOK BODY PARSE ERROR]",
+                        req.originalUrl,
+                        err?.message || err
+                    );
+
+                    req.body = {};
+                    req.bodyParseError = err?.message || "invalid json";
+
+                    return next();
+
+                }
+
+                return next(err);
+
+            }
+
+            next();
+
+        });
+
+    }
 );
 
 
@@ -278,9 +322,12 @@ backendRouter
 
 console.log(
 
-"✅ SHIVINFRA API ROUTES LOADED"
+    "✅ SHIVINFRA API ROUTES LOADED"
 
 );
+
+
+startFollowUpScheduler();
 
 
 
@@ -686,14 +733,17 @@ console.log(
 server.close(()=>{
 
 
-console.log(
-
-"SERVER CLOSED"
-
-);
+    stopFollowUpScheduler();
 
 
-process.exit(0);
+    console.log(
+
+        "SERVER CLOSED"
+
+    );
+
+
+    process.exit(0);
 
 
 });

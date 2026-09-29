@@ -46,7 +46,7 @@ export const Dialog: React.FC<DialogProps> = ({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="absolute inset-0 bg-black/60 backdrop-blur-xs"
+            className="absolute inset-0 bg-black/30 backdrop-blur-xs"
           />
 
           {/* Modal Container */}
@@ -55,23 +55,23 @@ export const Dialog: React.FC<DialogProps> = ({
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 15 }}
             transition={{ type: 'spring', duration: 0.4 }}
-            className={`relative w-full ${sizeClasses[size]} bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl overflow-hidden z-10`}
+            className={`relative w-full ${sizeClasses[size]} bg-surface border border-border rounded-2xl shadow-2xl overflow-hidden z-10`}
           >
             {/* Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-800 bg-slate-950/50">
-              <h3 className="text-lg font-semibold text-slate-100 font-sans tracking-tight">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-border bg-surface">
+              <h3 className="text-lg font-semibold text-text-primary font-sans tracking-tight">
                 {title}
               </h3>
               <button
                 onClick={onClose}
-                className="p-1.5 text-slate-400 hover:text-slate-200 hover:bg-slate-800 rounded-lg transition-colors cursor-pointer"
+                className="p-1.5 text-text-secondary hover:text-text-primary hover:bg-bg-app rounded-lg transition-colors cursor-pointer"
               >
                 <X size={18} />
               </button>
             </div>
 
             {/* Scrollable Content */}
-            <div className="p-6 max-h-[80vh] overflow-y-auto custom-scrollbar text-slate-300">
+            <div className="p-6 max-h-[80vh] overflow-y-auto custom-scrollbar text-text-secondary">
               {children}
             </div>
           </motion.div>

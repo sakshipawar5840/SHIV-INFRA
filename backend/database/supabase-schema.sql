@@ -62,7 +62,7 @@ CREATE TABLE public.users (
 CREATE TABLE public.projects (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE NOT NULL,
-    name VARCHAR(255) NOT NULL,
+    project_name VARCHAR(255) NOT NULL,
     location VARCHAR(255) NOT NULL,
     city VARCHAR(100),
     flat_type VARCHAR(100), -- e.g., '2 BHK', '3 BHK', 'Penthouse'
@@ -105,18 +105,15 @@ CREATE TABLE public.project_documents (
 CREATE TABLE public.leads (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE NOT NULL,
-    name VARCHAR(255) NOT NULL,
-    phone VARCHAR(50) NOT NULL,
-    email VARCHAR(255),
-    requirement VARCHAR(255),
-    status VARCHAR(50) DEFAULT 'New' CHECK (status IN ('New', 'Contacted', 'Interested', 'Site Visit Scheduled', 'Negotiation', 'Booked', 'Rejected', 'Not Interested', 'Won', 'Lost')),
-    source VARCHAR(100), -- e.g., 'Instagram Ads', 'Facebook Ads', 'Google Search'
-    assigned_sales_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
-    location VARCHAR(255),
-    budget VARCHAR(100),
-    notes TEXT,
-    ai_score INTEGER CHECK (ai_score >= 0 AND ai_score <= 100),
-    ai_summary TEXT,
+    customer_id UUID REFERENCES public.customers(id) ON DELETE SET NULL,
+    project_id UUID REFERENCES public.projects(id) ON DELETE SET NULL,
+    lead_source VARCHAR(100),
+    requirement TEXT,
+    budget BIGINT,
+    preferred_location VARCHAR(255),
+    status VARCHAR(50) DEFAULT 'New',
+    assigned_to UUID REFERENCES public.users(id) ON DELETE SET NULL,
+    remarks TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     is_deleted BOOLEAN DEFAULT false NOT NULL
@@ -128,17 +125,21 @@ CREATE TABLE public.leads (
 CREATE TABLE public.customers (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE NOT NULL,
-    name VARCHAR(255) NOT NULL,
+    full_name VARCHAR(255) NOT NULL,
     phone VARCHAR(50) NOT NULL,
     email VARCHAR(255),
-    requirement TEXT,
+    city VARCHAR(100),
+    state VARCHAR(100),
+    pincode VARCHAR(20),
+    address TEXT,
     budget VARCHAR(100),
-    location_preference VARCHAR(255),
+    interested_location VARCHAR(255),
+    interested_property_type TEXT,
     status VARCHAR(50) DEFAULT 'Active' CHECK (status IN ('Active', 'VIP', 'Inactive', 'Closed')),
-    lead_source VARCHAR(100),
+    source VARCHAR(100),
     notes TEXT,
-    assigned_salesperson_id UUID REFERENCES public.users(id) ON DELETE SET NULL,
     last_followup TIMESTAMP WITH TIME ZONE,
+    deleted_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     is_deleted BOOLEAN DEFAULT false NOT NULL
@@ -210,10 +211,15 @@ CREATE TABLE public.bills (
     amount BIGINT DEFAULT 0, -- In INR
     material VARCHAR(255),
     bill_date DATE,
+    quantity NUMERIC(12,2),
+    unit VARCHAR(50),
     file_url TEXT,
     original_file_url TEXT,
     ocr_status VARCHAR(50) DEFAULT 'Pending' CHECK (ocr_status IN ('Pending', 'Processing', 'Success', 'Failed')),
+    ocr_text JSONB,
+    remarks TEXT,
     approved_by UUID REFERENCES public.users(id),
+    uploaded_by UUID REFERENCES public.users(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     is_deleted BOOLEAN DEFAULT false NOT NULL
@@ -226,12 +232,20 @@ CREATE TABLE public.expenses (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE NOT NULL,
     project_id UUID REFERENCES public.projects(id) ON DELETE SET NULL,
+    bill_id UUID REFERENCES public.bills(id) ON DELETE SET NULL,
     vendor_id UUID REFERENCES public.vendors(id) ON DELETE SET NULL,
-    category VARCHAR(100) NOT NULL, -- e.g., 'Procurement', 'Labor Wages', 'Permit Fees', 'Fuel'
+    expense_title TEXT,
+    expense_category VARCHAR(100),
     amount BIGINT DEFAULT 0,
-    description TEXT,
     expense_date DATE NOT NULL,
     payment_method VARCHAR(50) DEFAULT 'Cash',
+    remarks TEXT,
+    created_by UUID REFERENCES public.users(id) ON DELETE SET NULL,
+    title TEXT,
+    category VARCHAR(100),
+    description TEXT,
+    payment_mode VARCHAR(50),
+    vendor VARCHAR(255),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     is_deleted BOOLEAN DEFAULT false NOT NULL
@@ -256,11 +270,36 @@ CREATE TABLE public.reports (
 CREATE TABLE public.broadcasts (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE NOT NULL,
+    created_by UUID REFERENCES public.users(id),
     message_text TEXT NOT NULL,
-    audience VARCHAR(100), -- e.g., 'All Customers', 'Warm Leads', 'Site Engineers'
-    status VARCHAR(50) DEFAULT 'Pending' CHECK (status IN ('Pending', 'Sent', 'Failed')),
+    audience VARCHAR(100),
+    status VARCHAR(50) DEFAULT 'Pending' CHECK (status IN ('Pending', 'Sent', 'Failed', 'Partial')),
+    recipient_count INTEGER DEFAULT 0,
+    success_count INTEGER DEFAULT 0,
+    failure_count INTEGER DEFAULT 0,
+    channel VARCHAR(255) DEFAULT 'whatsapp',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    completed_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE TABLE public.broadcast_recipients (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    broadcast_id UUID REFERENCES public.broadcasts(id) ON DELETE CASCADE NOT NULL,
+    company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE NOT NULL,
+    phone VARCHAR(50) NOT NULL,
+    recipient_type VARCHAR(50) CHECK (recipient_type IN ('customer', 'lead')),
+    recipient_id UUID,
+    provider_message_id VARCHAR(255),
+    channel VARCHAR(50) DEFAULT 'whatsapp',
+    status VARCHAR(50) DEFAULT 'Pending' CHECK (status IN ('Pending', 'Sent', 'Failed', 'Skipped')),
+    error TEXT,
+    sent_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+CREATE INDEX idx_broadcasts_company ON public.broadcasts(company_id, created_at DESC);
+CREATE INDEX idx_broadcast_recipients_broadcast ON public.broadcast_recipients(broadcast_id);
+CREATE INDEX idx_broadcast_recipients_phone ON public.broadcast_recipients(phone);
 
 CREATE TABLE public.chat_history (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -270,6 +309,22 @@ CREATE TABLE public.chat_history (
     sender VARCHAR(50) CHECK (sender IN ('User', 'Agent', 'System')),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
+
+CREATE TABLE public.followups (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    company_id UUID REFERENCES public.companies(id) ON DELETE CASCADE NOT NULL,
+    lead_id UUID REFERENCES public.leads(id) ON DELETE CASCADE,
+    phone VARCHAR(50) NOT NULL,
+    message TEXT NOT NULL,
+    scheduled_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    sent BOOLEAN DEFAULT false NOT NULL,
+    sent_at TIMESTAMP WITH TIME ZONE,
+    error TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
+CREATE INDEX idx_followups_company ON public.followups(company_id);
+CREATE INDEX idx_followups_scheduled ON public.followups(scheduled_at, sent);
 
 CREATE TABLE public.whatsapp_messages (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -307,10 +362,21 @@ CREATE TABLE public.settings (
     whatsapp_enabled BOOLEAN DEFAULT true,
     meta_phone_id VARCHAR(255),
     meta_access_token TEXT,
+    meta_fb_page_id VARCHAR(255),
+    meta_fb_page_access_token TEXT,
+    meta_ig_account_id VARCHAR(255),
+    meta_ig_access_token TEXT,
+    sms_enabled BOOLEAN DEFAULT false,
+    sms_provider VARCHAR(50) DEFAULT 'twilio',
+    sms_from VARCHAR(50),
+    sms_account_sid VARCHAR(255),
+    sms_api_key TEXT,
+    sms_endpoint VARCHAR(500),
     openai_key_override TEXT,
     google_drive_folder_id VARCHAR(255),
     google_calendar_id VARCHAR(255),
     alert_email VARCHAR(255) DEFAULT 'shivinfra55@gmail.com',
+    settings_data JSONB DEFAULT '{}'::jsonb,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
@@ -512,6 +578,266 @@ CREATE POLICY bill_admin_control ON public.bills
 
 CREATE POLICY bill_engineer_log ON public.bills
     FOR SELECT, INSERT USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() = 'Engineer'
+    );
+
+-- 6. Customers CRM Security
+CREATE POLICY customer_admin_crud ON public.customers
+    FOR ALL USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() IN ('Super Admin', 'Admin')
+    );
+
+CREATE POLICY customer_engineer_rw ON public.customers
+    FOR SELECT, INSERT, UPDATE USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() = 'Engineer'
+    );
+
+CREATE POLICY customer_customer_read ON public.customers
+    FOR SELECT USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() = 'Customer'
+    );
+
+-- 7. Expenses Security
+CREATE POLICY expense_admin_crud ON public.expenses
+    FOR ALL USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() IN ('Super Admin', 'Admin')
+    );
+
+CREATE POLICY expense_engineer_rw ON public.expenses
+    FOR SELECT, INSERT, UPDATE USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() = 'Engineer'
+    );
+
+-- 8. Vendors Security
+CREATE POLICY vendor_admin_crud ON public.vendors
+    FOR ALL USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() IN ('Super Admin', 'Admin')
+    );
+
+CREATE POLICY vendor_engineer_rw ON public.vendors
+    FOR SELECT, INSERT, UPDATE USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() = 'Engineer'
+    );
+
+-- 9. Materials Security
+CREATE POLICY material_admin_crud ON public.materials
+    FOR ALL USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() IN ('Super Admin', 'Admin')
+    );
+
+CREATE POLICY material_engineer_rw ON public.materials
+    FOR SELECT, INSERT, UPDATE USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() = 'Engineer'
+    );
+
+CREATE POLICY material_customer_read ON public.materials
+    FOR SELECT USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() = 'Customer'
+    );
+
+-- 10. Site Visits Security
+CREATE POLICY site_visit_admin_crud ON public.site_visits
+    FOR ALL USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() IN ('Super Admin', 'Admin')
+    );
+
+CREATE POLICY site_visit_engineer_rw ON public.site_visits
+    FOR SELECT, INSERT, UPDATE USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() = 'Engineer'
+    );
+
+CREATE POLICY site_visit_customer_read ON public.site_visits
+    FOR SELECT USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() = 'Customer'
+    );
+
+-- 11. Notifications Security
+CREATE POLICY notification_admin_crud ON public.notifications
+    FOR ALL USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() IN ('Super Admin', 'Admin')
+    );
+
+CREATE POLICY notification_engineer_read ON public.notifications
+    FOR SELECT USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() = 'Engineer'
+    );
+
+CREATE POLICY notification_customer_read ON public.notifications
+    FOR SELECT USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() = 'Customer'
+    );
+
+-- 12. Activity Logs Security
+CREATE POLICY activity_log_admin_crud ON public.activity_logs
+    FOR ALL USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() IN ('Super Admin', 'Admin')
+    );
+
+CREATE POLICY activity_log_engineer_read ON public.activity_logs
+    FOR SELECT USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() = 'Engineer'
+    );
+
+-- 13. Chat History Security
+CREATE POLICY chat_history_admin_crud ON public.chat_history
+    FOR ALL USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() IN ('Super Admin', 'Admin')
+    );
+
+CREATE POLICY chat_history_engineer_read ON public.chat_history
+    FOR SELECT USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() = 'Engineer'
+    );
+
+-- 14. Followups Security
+CREATE POLICY followup_admin_crud ON public.followups
+    FOR ALL USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() IN ('Super Admin', 'Admin')
+    );
+
+CREATE POLICY followup_engineer_rw ON public.followups
+    FOR SELECT, INSERT, UPDATE USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() = 'Engineer'
+    );
+
+-- 15. WhatsApp Messages Security
+CREATE POLICY whatsapp_message_admin_crud ON public.whatsapp_messages
+    FOR ALL USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() IN ('Super Admin', 'Admin')
+    );
+
+CREATE POLICY whatsapp_message_engineer_read ON public.whatsapp_messages
+    FOR SELECT USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() = 'Engineer'
+    );
+
+-- 16. Broadcasts Security
+CREATE POLICY broadcast_admin_crud ON public.broadcasts
+    FOR ALL USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() IN ('Super Admin', 'Admin')
+    );
+
+CREATE POLICY broadcast_recipients_admin ON public.broadcast_recipients
+    FOR ALL USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() IN ('Super Admin', 'Admin')
+    );
+
+-- 17. Reports Security
+CREATE POLICY report_admin_crud ON public.reports
+    FOR ALL USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() IN ('Super Admin', 'Admin')
+    );
+
+CREATE POLICY report_engineer_read ON public.reports
+    FOR SELECT USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() = 'Engineer'
+    );
+
+-- 18. Subscriptions Security
+CREATE POLICY subscription_admin_crud ON public.subscriptions
+    FOR ALL USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() IN ('Super Admin', 'Admin')
+    );
+
+-- 19. Settings Security
+CREATE POLICY setting_admin_crud ON public.settings
+    FOR ALL USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() IN ('Super Admin', 'Admin')
+    );
+
+-- 20. Knowledge Base Security
+CREATE POLICY knowledge_base_admin_crud ON public.knowledge_base
+    FOR ALL USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() IN ('Super Admin', 'Admin')
+    );
+
+CREATE POLICY knowledge_base_engineer_read ON public.knowledge_base
+    FOR SELECT USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() = 'Engineer'
+    );
+
+-- 21. AI Logs Security
+CREATE POLICY ai_log_admin_crud ON public.ai_logs
+    FOR ALL USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() IN ('Super Admin', 'Admin')
+    );
+
+CREATE POLICY ai_log_engineer_read ON public.ai_logs
+    FOR SELECT USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() = 'Engineer'
+    );
+
+-- 22. Login History Security
+CREATE POLICY login_history_admin_crud ON public.login_history
+    FOR ALL USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() IN ('Super Admin', 'Admin')
+    );
+
+-- 23. Password Resets Security
+CREATE POLICY password_reset_admin_crud ON public.password_resets
+    FOR ALL USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() IN ('Super Admin', 'Admin')
+    );
+
+-- 24. Project Images Security
+CREATE POLICY project_image_admin_crud ON public.project_images
+    FOR ALL USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() IN ('Super Admin', 'Admin')
+    );
+
+CREATE POLICY project_image_engineer_read ON public.project_images
+    FOR SELECT USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() = 'Engineer'
+    );
+
+-- 25. Project Documents Security
+CREATE POLICY project_document_admin_crud ON public.project_documents
+    FOR ALL USING (
+        company_id = public.get_auth_user_company()
+        AND public.get_auth_user_role() IN ('Super Admin', 'Admin')
+    );
+
+CREATE POLICY project_document_engineer_read ON public.project_documents
+    FOR SELECT USING (
         company_id = public.get_auth_user_company()
         AND public.get_auth_user_role() = 'Engineer'
     );

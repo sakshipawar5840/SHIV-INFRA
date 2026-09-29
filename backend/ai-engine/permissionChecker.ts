@@ -107,6 +107,10 @@ export async function checkPermission(
 
             "BOOK_SITE_VISIT",
 
+            "SEARCH_MATERIAL",
+
+            "SEARCH_BILLS",
+
             "GENERAL_CHAT"
 
 
@@ -170,16 +174,56 @@ export async function checkPermission(
     if(role === "ENGINEER"){
 
 
-
         const engineerAllowed = [
 
 
-            "UPLOAD_BILL",
-
-            "ADD_EXPENSE",
-
             "SEARCH_PROJECTS",
 
+            "ADD_LEAD",
+            "SEARCH_LEADS",
+            "UPDATE_LEAD",
+            "DELETE_LEAD",
+
+            "SEARCH_CUSTOMERS",
+
+            "ADD_EXPENSE",
+            "SEARCH_EXPENSES",
+            "UPDATE_EXPENSE",
+            "DELETE_EXPENSE",
+
+            "UPLOAD_BILL",
+            "SEARCH_BILLS",
+            "UPDATE_BILL",
+            "DELETE_BILL",
+
+            "SEARCH_MATERIAL",
+
+            "SEARCH_TASKS",
+            "ADD_TASK",
+            "UPDATE_TASK",
+            "DELETE_TASK",
+
+            "SEARCH_SITE_VISITS",
+            "BOOK_SITE_VISIT",
+            "UPDATE_SITE_VISIT",
+            "DELETE_SITE_VISIT",
+
+            "SEARCH_INVENTORY",
+            "ADD_INVENTORY",
+            "UPDATE_INVENTORY",
+            "DELETE_INVENTORY",
+
+            "SEARCH_VENDORS",
+            "ADD_VENDOR",
+            "UPDATE_VENDOR",
+            "DELETE_VENDOR",
+
+            "SEARCH_DOCUMENTS",
+            "UPLOAD_DOCUMENT",
+            "UPDATE_DOCUMENT",
+            "DELETE_DOCUMENT",
+
+            "GENERATE_REPORT",
             "GENERAL_CHAT"
 
 
@@ -254,6 +298,14 @@ export async function checkPermission(
             "SEARCH_LEADS",
 
             "BOOK_SITE_VISIT",
+
+            "SEARCH_MATERIAL",
+
+            "SEARCH_BILLS",
+
+            "SEARCH_TASKS",
+
+            "GENERATE_REPORT",
 
             "GENERAL_CHAT"
 

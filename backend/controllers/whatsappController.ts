@@ -1113,4 +1113,4 @@ export default WhatsAppController;
 //
 // FINAL CLEAN PRODUCTION
 //
-// =====================================================
+// =====================================================git config --global core.pager ""git config --global core.pager ""git config --global core.pager ""

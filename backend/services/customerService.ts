@@ -59,17 +59,27 @@ interface CustomerCreateData {
 
     interested_property_type?:string;
 
+    requirement?:string;
+
 
     interested_location?:string;
 
+    location_preference?:string;
+
 
     source?:string;
+
+    lead_source?:string;
 
 
     status?:string;
 
 
     notes?:string;
+
+    assigned_salesperson_id?:string;
+
+    assigned_to?:string;
 
 
 }
@@ -448,133 +458,24 @@ try{
 
 
     const insertData:any = {
-
-
-
-        company_id:
-
-        customer.company_id,
-
-
-
-
-        full_name:
-
-        customerName,
-
-
-
-
-        phone:
-
-        phone || null,
-
-
-
-
-        email:
-
-        customer.email || null,
-
-
-
-
-        city:
-
-        customer.city || null,
-
-
-
-
-        state:
-
-        customer.state || null,
-
-
-
-
-        pincode:
-
-        customer.pincode || null,
-
-
-
-
-        address:
-
-        customer.address || null,
-
-
-
-
-        budget:
-
-        customer.budget
-
-        ?
-
-        Number(customer.budget)
-
-        :
-
-        null,
-
-
-
-
-        interested_property_type:
-
-        customer.interested_property_type || null,
-
-
-
-
-        interested_location:
-
-        customer.interested_location || null,
-
-
-
-
-        source:
-
-        customer.source || "AI",
-
-
-
-
-        status:
-
-        customer.status || "active",
-
-
-
-
-        notes:
-
-        customer.notes || null,
-
-
-
-
-        is_deleted:false,
-
-
-
-
-        created_at:
-
-        now,
-
-
-
-
-        updated_at:
-
-        now
-
-
-
+        company_id: customer.company_id,
+        full_name: customerName || "Customer",
+        phone: phone || null,
+        email: customer.email || null,
+        address: customer.address || null,
+        city: customer.city || null,
+        state: customer.state || null,
+        pincode: customer.pincode || null,
+        interested_location: customer.interested_location || customer.location_preference || null,
+        interested_property_type: customer.interested_property_type || customer.requirement || null,
+        budget: customer.budget ? String(customer.budget) : null,
+        source: customer.source || "AI",
+        status: customer.status || "active",
+        notes: customer.notes || null,
+        is_deleted: false,
+        deleted_at: null,
+        created_at: now,
+        updated_at: now
     };
 
 
@@ -744,16 +645,21 @@ const {
 
 if(error)
 
-throw error;
+return {
 
+    success:false,
+
+    message:
+
+    "AI memory table not available"
+
+};
 
 
 
 
 
 return data || [];
-
-
 
 }
 
@@ -835,7 +741,15 @@ const {
 
 if(error)
 
-throw error;
+return {
+
+    success:false,
+
+    message:
+
+    "AI memory table not available"
+
+};
 
 
 
@@ -948,7 +862,15 @@ const {
 
 if(error)
 
-throw error;
+return {
+
+    success:false,
+
+    message:
+
+    "AI memory table not available"
+
+};
 
 
 
@@ -1430,7 +1352,7 @@ try{
 
 
 
-    return data || [];
+return data || [];
 
 
 
@@ -2509,11 +2431,11 @@ try{
     if(updateData.budget !== undefined){
 
 
-
         cleanData.budget =
 
 
-        Number(
+
+        String(
 
             updateData.budget
 
@@ -2571,7 +2493,8 @@ try{
 
 
 
-    const {
+
+const {
 
         data,
 
@@ -3150,7 +3073,15 @@ const {
 
 if(error)
 
-throw error;
+return {
+
+    success:false,
+
+    message:
+
+    "AI memory table not available"
+
+};
 
 
 
@@ -3261,7 +3192,15 @@ const {
 
 if(error)
 
-throw error;
+return {
+
+    success:false,
+
+    message:
+
+    "AI memory table not available"
+
+};
 
 
 
@@ -3345,7 +3284,15 @@ const {
 
 if(error)
 
-throw error;
+return {
+
+    success:false,
+
+    message:
+
+    "AI memory table not available"
+
+};
 
 
 
@@ -3717,7 +3664,15 @@ const {
 
 if(error)
 
-throw error;
+return {
+
+    success:false,
+
+    message:
+
+    "AI memory table not available"
+
+};
 
 
 
@@ -3726,8 +3681,10 @@ throw error;
 
 
 
-
-return data || [];
+return {
+        data: data || [],
+        success: true
+    };;
 
 
 
@@ -3836,7 +3793,15 @@ const {
 
 if(error)
 
-throw error;
+return {
+
+    success:false,
+
+    message:
+
+    "AI memory table not available"
+
+};
 
 
 
@@ -3940,7 +3905,15 @@ const {
 
 if(error)
 
-throw error;
+return {
+
+    success:false,
+
+    message:
+
+    "AI memory table not available"
+
+};
 
 
 
@@ -4040,7 +4013,15 @@ const {
 
 if(error)
 
-throw error;
+return {
+
+    success:false,
+
+    message:
+
+    "AI memory table not available"
+
+};
 
 
 
@@ -4271,7 +4252,15 @@ const {
 
 if(error)
 
-throw error;
+return {
+
+    success:false,
+
+    message:
+
+    "AI memory table not available"
+
+};
 
 
 
@@ -4382,7 +4371,15 @@ const {
 
 if(error)
 
-throw error;
+return {
+
+    success:false,
+
+    message:
+
+    "AI memory table not available"
+
+};
 
 
 
@@ -4505,7 +4502,15 @@ const {
 
 if(error)
 
-throw error;
+return {
+
+    success:false,
+
+    message:
+
+    "AI memory table not available"
+
+};
 
 
 
@@ -4548,7 +4553,15 @@ console.error(
 
 
 
-throw error;
+return {
+
+    success:false,
+
+    message:
+
+    "AI memory save failed"
+
+};
 
 
 
@@ -4642,7 +4655,15 @@ const {
 
 if(error)
 
-throw error;
+return {
+
+    success:false,
+
+    message:
+
+    "AI memory table not available"
+
+};
 
 
 
@@ -4768,7 +4789,15 @@ const {
 
 if(error)
 
-throw error;
+return {
+
+    success:false,
+
+    message:
+
+    "AI memory table not available"
+
+};
 
 
 
@@ -5410,7 +5439,15 @@ const {
 
 if(error)
 
-throw error;
+return {
+
+    success:false,
+
+    message:
+
+    "AI memory table not available"
+
+};
 
 
 
@@ -5573,3 +5610,5 @@ return {
 
 
 export default new CustomerService();
+
+

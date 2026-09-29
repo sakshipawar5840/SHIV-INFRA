@@ -404,21 +404,23 @@ try{
 
 
 
-    if(error)
+if(error)
 
-    throw error;
-
-
+throw error;
 
 
 
 
 
-    return data;
+
+
+return data || null;
 
 
 
 }
+
+
 catch(error:any){
 
 
@@ -432,6 +434,7 @@ catch(error:any){
     );
 
 
+
     throw error;
 
 
@@ -441,14 +444,6 @@ catch(error:any){
 
 
 }
-
-
-
-
-
-
-
-
 
 
 
@@ -1033,10 +1028,18 @@ try{
 
 
 
+    // =====================================================
+    // NAME SEARCH
+    // Resolve through customers.full_name, not leads.name
+    // =====================================================
 
+    if (params?.name) {
+        const lead = await this.smartFindLead(companyId, params);
 
-
-
+        if (lead) {
+            return lead.id;
+        }
+    }
 
 
     // QUERY SEARCH
@@ -4567,18 +4570,177 @@ new Date()
 
 
 // =====================================================
+
+// =====================================================
+// SMART FIND LEAD
+// CUSTOMER NAME / LEAD ID / QUERY RESOLUTION
+// =====================================================
+
+async smartFindLead(
+    companyId: string,
+    params: any = {}
+) {
+    try {
+        if (params?.id) {
+            const { data, error } = await supabase
+                .from("leads")
+                .select(`
+                    *,
+                    customers(
+                        id,
+                        full_name,
+                        phone,
+                        email
+                    ),
+                    projects(
+                        id,
+                        project_name,
+                        location
+                    )
+                `)
+                .eq("id", params.id)
+                .eq("company_id", companyId)
+                .maybeSingle();
+
+            if (error) throw error;
+            return data || null;
+        }
+
+        if (params?.customer_id) {
+            return await this.findLeadByCustomer(
+                companyId,
+                params.customer_id
+            );
+        }
+
+        let searchName = "";
+
+        if (typeof params?.name === "string") {
+            searchName = params.name;
+        } else if (
+            params?.name &&
+            typeof params.name === "object"
+        ) {
+            searchName =
+                params.name.name ||
+                params.name.full_name ||
+                params.name.customer_name ||
+                "";
+        }
+
+        searchName = String(searchName || "")
+            .trim()
+            .toLowerCase();
+
+        const queryText = String(params?.query || "")
+            .trim()
+            .toLowerCase();
+
+        const normalizedSearch = searchName || queryText;
+
+        console.log("[SMART FIND LEAD] normalizedSearch:", normalizedSearch);
+
+        if (!normalizedSearch) {
+            return null;
+        }
+
+        // IMPORTANT:
+        // leads.name does not exist.
+        // The person's name is stored in customers.full_name.
+        const { data, error } = await supabase
+            .from("leads")
+            .select(`
+                *,
+                customers(
+                    id,
+                    full_name,
+                    phone,
+                    email
+                ),
+                projects(
+                    id,
+                    project_name,
+                    location
+                )
+            `)
+            .eq("company_id", companyId)
+            .order("created_at", { ascending: false })
+            .limit(200);
+
+        if (error) throw error;
+        if (!data || data.length === 0) return null;
+
+        const matched = data.filter((lead: any) => {
+            const values = [
+                lead?.customers?.full_name,
+                lead?.customers?.phone,
+                lead?.customers?.email,
+                lead?.requirement,
+                lead?.preferred_location,
+                lead?.remarks
+            ].map(value =>
+                String(value || "").toLowerCase()
+            );
+
+            return values.some(value =>
+                value.includes(normalizedSearch)
+            );
+        });
+
+        const exactNameMatch = matched.find((lead: any) =>
+            String(lead?.customers?.full_name || "")
+                .trim()
+                .toLowerCase() === normalizedSearch
+        );
+
+        console.log("[SMART FIND LEAD] matched:", matched.length, "exact:", exactNameMatch ? "yes" : "no");
+
+        return exactNameMatch || matched[0] || null;
+    } catch (error: any) {
+        console.error(
+            "SMART FIND LEAD ERROR:",
+            error?.message || error
+        );
+        throw error;
+    }
+}
+
+
+async findLeadByName(
+
+    companyId: string,
+    name: string
+
+){
+
+    const result =
+    await this.smartFindLead(companyId, { name });
+    return result;
+}
+
+
+// FINAL END OF CLASS
+// =====================================================
+
 // FINAL END OF CLASS
 // =====================================================
 
 
+
+
+
+
+
+
+
+
+
+
+// =====================================================
+// FINAL END OF CLASS
+// =====================================================
+
 }
-
-
-
-
-
-
-
 
 
 // =====================================================
@@ -4591,4 +4753,4 @@ export default new LeadService();
 
 // =====================================================
 // SHIVINFRA LEAD SERVICE V12 COMPLETE
-// =====================================================
+// ================================================

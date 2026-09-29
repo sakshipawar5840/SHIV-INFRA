@@ -4,7 +4,7 @@
 //
 // Production Conversation Memory
 // Database: Supabase
-// Actual chat_history columns: id, company_id, customer_id, user_type, message, ai_response, created_at
+// Actual chat_history columns: id, company_id, phone, message, sender, created_at
 // =====================================================
 
 import { supabaseAdmin as supabase } from "../config/supabase.ts";
@@ -48,13 +48,11 @@ export interface ConversationMessage {
 
     company_id: string;
 
-    customer_id?: string | null;
-
-    user_type?: string | null;
+    phone?: string | null;
 
     message: string;
 
-    ai_response?: string | null;
+    sender?: string | null;
 
     created_at?: string;
 
@@ -117,7 +115,21 @@ export async function saveConversation(
 
             company_id: companyId,
 
-            message: safeMessage
+            phone:
+                String(
+                    request.phone ||
+                    request.userId ||
+                    ""
+                ).trim(),
+
+            message: safeMessage,
+
+            sender:
+                request.role === "AI"
+                    ? "Agent"
+                    : request.role === "SYSTEM"
+                        ? "System"
+                        : "User"
 
         };
 
@@ -185,15 +197,18 @@ export async function getConversationHistory(
                 .select(`
                     id,
                     company_id,
-                    customer_id,
-                    user_type,
+                    phone,
                     message,
-                    ai_response,
+                    sender,
                     created_at
                 `)
                 .eq(
                     "company_id",
                     companyId
+                )
+                .eq(
+                    "phone",
+                    userId || ""
                 )
                 .order(
                     "created_at",
@@ -222,14 +237,21 @@ export async function getConversationHistory(
 
         const messages =
             Array.isArray(data)
-                ? data
+                ? data.map((row: any) => ({
+                      id: row.id,
+                      company_id: row.company_id,
+                      phone: row.phone || null,
+                      message: row.message,
+                      sender: row.sender || null,
+                      created_at: row.created_at
+                  }))
                 : [];
 
 
         // Database gives newest first.
         // AI needs oldest → newest.
 
-        return messages.reverse() as ConversationMessage[];
+        return messages.reverse();
 
     }
     catch (error) {
@@ -351,7 +373,7 @@ export async function clearConversationHistory(
 
             query =
             query.eq(
-                "user_id",
+                "phone",
                 userId
             );
 
@@ -364,26 +386,12 @@ export async function clearConversationHistory(
 
         if (error) {
 
-            // Fallback: try without user_id filter (column may not exist)
-            const { error: fallbackError } =
-                await supabase
-                    .from("chat_history")
-                    .delete()
-                    .eq(
-                        "company_id",
-                        companyId
-                    );
+            console.error(
+                "[SHIVINFRA MEMORY] Clear failed:",
+                error
+            );
 
-            if(fallbackError){
-
-                console.error(
-                    "[SHIVINFRA MEMORY] Clear failed:",
-                    fallbackError
-                );
-
-                return false;
-
-            }
+            return false;
 
         }
 
@@ -422,11 +430,9 @@ export async function getLastUserMessage(
                 .select(`
                     id,
                     company_id,
-                    user_id,
                     phone,
-                    role,
-                    channel,
                     message,
+                    sender,
                     created_at
                 `)
                 .eq(
@@ -434,8 +440,8 @@ export async function getLastUserMessage(
                     companyId
                 )
                 .eq(
-                    "role",
-                    "USER"
+                    "sender",
+                    "User"
                 )
                 .order(
                     "created_at",
@@ -449,39 +455,8 @@ export async function getLastUserMessage(
 
         if(error){
 
-            // Fallback: basic columns only
-            const fallbackResult =
-                await supabase
-                    .from("chat_history")
-                    .select(`
-                        id,
-                        company_id,
-                        message,
-                        created_at
-                    `)
-                    .eq(
-                        "company_id",
-                        companyId
-                    )
-                    .order(
-                        "created_at",
-                        {
-                            ascending: false
-                        }
-                    )
-                    .limit(1)
-                    .maybeSingle();
-
-            data = fallbackResult.data;
-            error = fallbackResult.error;
-
-        }
-
-
-        if (error) {
-
             console.error(
-                "[SHIVINFRA MEMORY] Last message fetch failed:",
+                "[SHIVINFRA MEMORY] Last user message fetch failed:",
                 error
             );
 
@@ -524,11 +499,9 @@ export async function getLastAIMessage(
                 .select(`
                     id,
                     company_id,
-                    user_id,
                     phone,
-                    role,
-                    channel,
                     message,
+                    sender,
                     created_at
                 `)
                 .eq(
@@ -536,8 +509,8 @@ export async function getLastAIMessage(
                     companyId
                 )
                 .eq(
-                    "role",
-                    "AI"
+                    "sender",
+                    "Agent"
                 )
                 .order(
                     "created_at",

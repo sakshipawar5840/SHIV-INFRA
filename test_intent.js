@@ -1,0 +1,13 @@
+const text = "update lead new lead person budget to 60 lakh";
+const hasUpdateAction = (t) => t.includes("update") || t.includes("change") || t.includes("edit") || t.includes("badal") || t.includes("modify") || t.includes("set");
+const hasDeleteAction = (t) => t.includes("delete") || t.includes("remove") || t.includes("delete kar") || t.includes("remove kar");
+console.log("text:", text);
+console.log("hasUpdateAction:", hasUpdateAction(text));
+console.log("text.includes('lead'):", text.includes("lead"));
+console.log("/\\bnew lead\\b/i.test(text):", /\bnew lead\b/i.test(text));
+console.log("text.includes('add'):", text.includes("add"));
+console.log("text.includes('create'):", text.includes("create"));
+console.log("text.includes('enquiry'):", text.includes("enquiry"));
+console.log("text.includes('inquiry'):", text.includes("inquiry"));
+console.log("UPDATE_LEAD condition:", hasUpdateAction(text) && text.includes("lead") && !/\bnew lead\b/i.test(text) && !text.includes("add") && !text.includes("create") && !text.includes("enquiry") && !text.includes("inquiry"));
+console.log("ADD_LEAD /\\bnew lead\\b/i.test(text):", /\bnew lead\b/i.test(text));

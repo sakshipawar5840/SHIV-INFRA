@@ -1,527 +1,220 @@
 import { Response, NextFunction } from "express";
 import { AuthenticatedRequest } from "../middleware/auth.ts";
-import { supabaseAdmin as supabase, isSupabaseConfigured } from "../config/supabase.ts";
-import { mockProjects, Project } from "../database/mockDB.ts";
+import { ProjectService } from "../services/projectService.ts";
 
+const projectService = new ProjectService();
 
 export class ProjectController {
-
-
-  // ===============================
-  // GET ALL PROJECTS
-  // ===============================
 
   static async getProjects(
     req: AuthenticatedRequest,
     res: Response,
     next: NextFunction
-  ){
+  ) {
+    try {
+      const companyId = req.user!.company_id;
+      const { query, status, city } = req.query;
 
-    const companyId = req.user!.company_id;
-
-
-    const { query, status, city } = req.query;
-
-
-    try{
-
-
-      let projects: Project[] = [];
-
-
-      if(isSupabaseConfigured){
-
-
-        let dbQuery = supabase
-          .from("projects")
-          .select("*")
-          .eq("company_id", companyId);
-
-
-
-        if(status){
-
-          dbQuery = dbQuery.eq(
-            "status",
-            status
-          );
-
+const result = await projectService.searchProjects(
+        companyId,
+        String(query || ""),
+        {
+          city: city ? String(city) : undefined,
+          status: status ? String(status) : undefined,
         }
-
-
-
-        if(city){
-
-          dbQuery = dbQuery.eq(
-            "city",
-            city
-          );
-
-        }
-
-
-
-        if(query){
-
-          dbQuery = dbQuery.ilike(
-            "project_name",
-            `%${query}%`
-          );
-
-        }
-
-
-
-        const {
-          data,
-          error
-        } = await dbQuery;
-
-
-
-        if(error) throw error;
-
-
-        projects = data || [];
-
-
-      }else{
-
-
-        projects =
-          mockProjects.filter(
-            p=>p.company_id === companyId
-          );
-
-
-      }
-
-
+      );
 
       return res.json({
-
-        success:true,
-
-        count:projects.length,
-
-        data:projects
-
+        success: true,
+        count: result.count || 0,
+        data: result.data || [],
       });
-
-
-
-    }catch(err){
-
+    } catch (err) {
       next(err);
-
     }
-
   }
-
-
-
-
-
-
-
-  // ===============================
-  // GET SINGLE PROJECT
-  // ===============================
 
   static async getProjectById(
-    req:AuthenticatedRequest,
-    res:Response,
-    next:NextFunction
-  ){
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ) {
+    try {
+      const companyId = req.user!.company_id;
+      const { id } = req.params;
 
+      const project = await projectService.getProjectById(
+        id,
+        companyId
+      );
 
-    const companyId = req.user!.company_id;
-
-
-    const {id}=req.params;
-
-
-
-    try{
-
-
-      const {
-        data,
-        error
-      } =
-      await supabase
-        .from("projects")
-        .select("*")
-        .eq("id",id)
-        .eq("company_id",companyId)
-        .single();
-
-
-
-      if(error || !data){
-
+      if (!project) {
         return res.status(404).json({
-
-          success:false,
-
-          message:"Project not found"
-
+          success: false,
+          message: "Project not found",
         });
-
       }
 
-
-
       return res.json({
-
-        success:true,
-
-        data
-
+        success: true,
+        data: project,
       });
-
-
-
-    }catch(err){
-
+    } catch (err) {
       next(err);
-
     }
-
-
   }
-
-
-
-
-
-
-
-
-
-  // ===============================
-  // CREATE PROJECT
-  // ===============================
 
   static async createProject(
-    req:AuthenticatedRequest,
-    res:Response,
-    next:NextFunction
-  ){
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ) {
+    try {
+      const companyId = req.user!.company_id;
 
+      const body = req.body;
 
-    const companyId = req.user!.company_id;
-
-
-
-    try{
-
-
-      const projectData = {
-
-
-        company_id:companyId,
-
-
+      const projectData: any = {
+        company_id: companyId,
         project_name:
-          req.body.name
-          ||
-          req.body.project_name
-          ||
+          body.project_name ||
+          body.name ||
           "",
-
-
-        location:
-          req.body.location,
-
-
-        city:
-          req.body.city,
-
-
-        state:
-          req.body.state || "",
-
-
-        pincode:
-          req.body.pincode || "",
-
-
-        description:
-          req.body.description || "",
-
-
-        flat_types:
-          req.body.flat_types
-          ||
-          req.body.flat_type
-          ||
+        location: body.location || "",
+        city: body.city || null,
+        flat_type: body.flat_type || null,
+        sqft: body.sqft || null,
+        price: body.price != null ? Number(body.price) : null,
+        status: body.status || "Ongoing",
+        description: body.description || null,
+        brochure_pdf_url:
+          body.brochure_pdf_url ||
+          body.brochure_url ||
           null,
-
-
-        total_units:
-          req.body.total_units || null,
-
-
-        available_units:
-          req.body.available_units || null,
-
-
-        area_sqft:
-          req.body.area_sqft || null,
-
-
-        price:
-          req.body.price || null,
-
-
-        brochure_url:
-          req.body.brochure_url
-          ||
-          req.body.brochure_pdf_url
-          ||
-          "",
-
-
-        thumbnail_url:
-          req.body.thumbnail_url || "",
-
-
-        gallery:
-          req.body.gallery || null,
-
-
-        amenities:
-          req.body.amenities || null,
-
-
-        contact_person:
-          req.body.contact_person || "",
-
-
-        contact_number:
-          req.body.contact_number || "",
-
-
-        status:
-          req.body.status || "Ongoing"
-
+        amenities: body.amenities || null,
+        google_maps_url: body.google_maps_url || null,
+        progress:
+          body.progress != null
+            ? Number(body.progress)
+            : null,
+        completion_status:
+          body.completion_status || null,
+        possession_date:
+          body.possession_date || null,
       };
 
-
-
-
-      const {
-        data,
-        error
-      } =
-      await supabase
-        .from("projects")
-        .insert(projectData)
-        .select()
-        .single();
-
-
-
-      if(error) throw error;
-
-
-
-      return res.status(201).json({
-
-        success:true,
-
-        message:"Project created successfully",
-
-        data
-
-      });
-
-
-
-    }catch(err){
-
-      next(err);
-
-    }
-
-
-  }
-
-
-
-
-
-
-
-
-
-  // ===============================
-  // UPDATE PROJECT
-  // ===============================
-
-  static async updateProject(
-    req:AuthenticatedRequest,
-    res:Response,
-    next:NextFunction
-  ){
-
-
-    const companyId = req.user!.company_id;
-
-
-    const {id}=req.params;
-
-
-
-    try{
-
-
-      const updatePayload: Record<string, any> = {
-
-
-        updated_at:
-          new Date().toISOString()
-
-
-      };
-
-
-      if(req.body.name !== undefined) updatePayload.name = req.body.name;
-      if(req.body.location !== undefined) updatePayload.location = req.body.location;
-      if(req.body.city !== undefined) updatePayload.city = req.body.city;
-      if(req.body.description !== undefined) updatePayload.description = req.body.description;
-      if(req.body.flat_type !== undefined) updatePayload.flat_type = req.body.flat_type;
-      if(req.body.sqft !== undefined) updatePayload.sqft = req.body.sqft;
-      if(req.body.price !== undefined) updatePayload.price = req.body.price;
-      if(req.body.status !== undefined) updatePayload.status = req.body.status;
-      if(req.body.brochure_pdf_url !== undefined) updatePayload.brochure_pdf_url = req.body.brochure_pdf_url;
-      if(req.body.amenities !== undefined) updatePayload.amenities = req.body.amenities;
-      if(req.body.google_maps_url !== undefined) updatePayload.google_maps_url = req.body.google_maps_url;
-      if(req.body.progress !== undefined) updatePayload.progress = req.body.progress;
-      if(req.body.completion_status !== undefined) updatePayload.completion_status = req.body.completion_status;
-      if(req.body.possession_date !== undefined) updatePayload.possession_date = req.body.possession_date;
-
-
-
-      const {
-        data,
-        error
-      } =
-      await supabase
-        .from("projects")
-        .update(updatePayload)
-        .eq("id",id)
-        .eq("company_id",companyId)
-        .select();
-
-
-
-      if(error) throw error;
-
-
-
-      if(!data || data.length===0){
-
-        return res.status(404).json({
-
-          success:false,
-
-          message:"Project not found"
-
-        });
-
+      if (req.file) {
+        projectData.brochure_pdf_url =
+          `/uploads/${req.file.filename}`;
       }
 
+      const result = await projectService.createProject(
+        projectData
+      );
 
+      if (!result.success) {
+        return res.status(400).json({
+          success: false,
+          message: result.message,
+          data: result.data,
+        });
+      }
 
-      return res.json({
-
-        success:true,
-
-        message:"Project updated successfully",
-
-        data:data[0]
-
+      return res.status(201).json({
+        success: true,
+        message: result.message,
+        data: result.data,
       });
-
-
-
-    }catch(err){
-
+    } catch (err) {
       next(err);
-
     }
-
-
   }
 
+  static async updateProject(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ) {
+    try {
+      const companyId = req.user!.company_id;
+      const { id } = req.params;
 
+      const body = req.body;
 
+      const updatePayload: any = {
+        updated_at: new Date().toISOString(),
+      };
 
+      if (body.project_name !== undefined || body.name !== undefined) {
+        updatePayload.project_name = body.project_name || body.name;
+      }
+      if (body.location !== undefined) updatePayload.location = body.location;
+      if (body.city !== undefined) updatePayload.city = body.city;
+      if (body.flat_type !== undefined) updatePayload.flat_type = body.flat_type;
+      if (body.sqft !== undefined) updatePayload.sqft = body.sqft;
+      if (body.price !== undefined) updatePayload.price = Number(body.price);
+      if (body.status !== undefined) updatePayload.status = body.status;
+      if (body.description !== undefined) updatePayload.description = body.description;
+      if (body.brochure_pdf_url !== undefined) updatePayload.brochure_pdf_url = body.brochure_pdf_url;
+      if (body.brochure_url !== undefined) updatePayload.brochure_pdf_url = body.brochure_url;
+      if (body.amenities !== undefined) updatePayload.amenities = body.amenities;
+      if (body.google_maps_url !== undefined) updatePayload.google_maps_url = body.google_maps_url;
+      if (body.progress !== undefined) updatePayload.progress = Number(body.progress);
+      if (body.completion_status !== undefined) updatePayload.completion_status = body.completion_status;
+      if (body.possession_date !== undefined) updatePayload.possession_date = body.possession_date;
 
+      if (req.file) {
+        updatePayload.brochure_pdf_url =
+          `/uploads/${req.file.filename}`;
+      }
 
+      const result = await projectService.updateProject(
+        id,
+        companyId,
+        updatePayload,
+        true
+      );
 
+      if (!result.success) {
+        return res.status(404).json({
+          success: false,
+          message: result.message || "Project not found",
+        });
+      }
 
-
-  // ===============================
-  // DELETE PROJECT
-  // ===============================
+      return res.json({
+        success: true,
+        message: result.message,
+        data: result.data,
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
 
   static async deleteProject(
-    req:AuthenticatedRequest,
-    res:Response,
-    next:NextFunction
-  ){
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ) {
+    try {
+      const companyId = req.user!.company_id;
+      const { id } = req.params;
 
-
-    const companyId = req.user!.company_id;
-
-
-    const {id}=req.params;
-
-
-
-    try{
-
-
-      const {
-        error
-      } =
-      await supabase
-        .from("projects")
-        .delete()
-        .eq("id",id)
-        .eq("company_id",companyId);
-
-
-
-      if(error) throw error;
-
-
+      const result = await projectService.deleteProject(
+        id,
+        companyId
+      );
 
       return res.json({
-
-        success:true,
-
-        message:"Project deleted"
-
+        success: true,
+        message: result.message,
+        data: result.data,
       });
-
-
-
-    }catch(err){
-
+    } catch (err) {
       next(err);
-
     }
-
-
   }
-
-
-
 }
-
 
 export default ProjectController;

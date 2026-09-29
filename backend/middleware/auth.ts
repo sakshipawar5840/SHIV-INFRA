@@ -2,8 +2,13 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 
 
-const JWT_SECRET =
-  process.env.JWT_SECRET || "shivinfra_jwt_secret_2026";
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+  throw new Error(
+    "JWT_SECRET environment variable is required. Application startup aborted."
+  );
+}
 
 
 export interface AuthenticatedRequest extends Request {

@@ -1,4 +1,4 @@
-// ============================================
+﻿// ============================================
 // SHIVINFRA AI ROUTES V15
 // FINAL PRODUCTION AI AGENT ROUTER
 //
@@ -359,6 +359,40 @@ router.get(
 
 
 
+
+
+// ============================================
+// AI PROVIDER STATUS
+// GET /api/v1/ai/gemini-status
+// PUBLIC - Shows 3-tier AI provider status (Gemini / OpenAI / fallback)
+// ============================================
+
+
+router.get(
+    "/gemini-status",
+    async (req: any, res: any) => {
+        try {
+            const { getAIProviderStatus } = await import("../ai-engine/intentDetector.ts");
+            const status = getAIProviderStatus();
+
+            return res.json({
+                success: true,
+                ai: {
+                    ...status,
+                    geminiModel: process.env.GEMINI_MODEL || "gemini-flash-latest",
+                    openaiModel: process.env.OPENAI_MODEL || "gpt-4o-mini"
+                },
+                timestamp: new Date()
+            });
+        } catch (error: any) {
+            return res.status(500).json({
+                success: false,
+                message: "Failed to get AI provider status",
+                error: error.message
+            });
+        }
+    }
+);
 
 // ============================================
 // EXPORT ROUTER

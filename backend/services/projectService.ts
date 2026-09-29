@@ -53,20 +53,23 @@ export interface ProjectCreateInput {
   total_units?: number | string;
   available_units?: number | string;
 
+  sqft?: number | string;
   area_sqft?: number | string;
 
   price?: number | string;
 
   status?: string;
 
+  brochure_pdf_url?: string;
   brochure_url?: string;
   thumbnail_url?: string;
 
   gallery?: any;
   amenities?: any;
 
+  progress?: number | string;
+  completion_status?: string;
   possession_date?: string;
-  rera_number?: string;
 
   contact_person?: string;
   contact_number?: string;
@@ -102,6 +105,7 @@ export interface ServiceResponse {
   message: string;
   data?: any;
   error?: any;
+  count?: number;
 }
 
 // =====================================================
@@ -141,6 +145,82 @@ class ProjectService {
     return String(value ?? "").trim();
   }
 
+  private mapApiToDb(data: any): any {
+    const db: any = {};
+
+    if (data.company_id !== undefined) db.company_id = data.company_id;
+    if (data.project_name !== undefined) db.project_name = data.project_name;
+    if (data.name !== undefined && !data.project_name) db.project_name = data.name;
+
+    if (data.project_type !== undefined) db.project_type = data.project_type;
+    if (data.location !== undefined) db.location = data.location;
+    if (data.city !== undefined) db.city = data.city;
+    if (data.state !== undefined) db.state = data.state;
+    if (data.pincode !== undefined) db.pincode = data.pincode;
+
+    if (data.description !== undefined) db.description = data.description;
+
+    // DB column is flat_types (string), accept flat_type or flat_types from API
+    if (data.flat_type !== undefined) db.flat_types = data.flat_type;
+    if (data.flat_types !== undefined) db.flat_types = Array.isArray(data.flat_types) ? data.flat_types[0] : data.flat_types;
+
+    if (data.total_units !== undefined) db.total_units = data.total_units;
+    if (data.available_units !== undefined) db.available_units = data.available_units;
+
+    // DB column is area_sqft (numeric), accept sqft or area_sqft from API
+    if (data.sqft !== undefined) db.area_sqft = data.sqft;
+    if (data.area_sqft !== undefined) db.area_sqft = data.area_sqft;
+
+    if (data.price !== undefined) db.price = data.price;
+
+    if (data.status !== undefined) db.status = data.status;
+
+    // DB column is brochure_url, accept brochure_pdf_url or brochure_url from API
+    if (data.brochure_pdf_url !== undefined) db.brochure_url = data.brochure_pdf_url;
+    if (data.brochure_url !== undefined) db.brochure_url = data.brochure_url;
+    if (data.thumbnail_url !== undefined) db.thumbnail_url = data.thumbnail_url;
+
+    if (data.gallery !== undefined) db.gallery = data.gallery;
+    if (data.amenities !== undefined) db.amenities = data.amenities;
+
+    if (data.contact_person !== undefined) db.contact_person = data.contact_person;
+    if (data.contact_number !== undefined) db.contact_number = data.contact_number;
+
+    if (data.is_deleted !== undefined) db.is_deleted = data.is_deleted;
+    if (data.deleted_at !== undefined) db.deleted_at = data.deleted_at;
+
+    return db;
+  }
+
+  private mapDbToApi(row: any): any {
+    if (!row) return null;
+
+    const api: any = { ...row };
+
+    // DB has area_sqft → API expects sqft
+    if (row.area_sqft !== undefined) api.sqft = row.area_sqft;
+    // DB has brochure_url → API expects brochure_pdf_url
+    if (row.brochure_url !== undefined) api.brochure_pdf_url = row.brochure_url;
+    // DB has flat_types (string) → API expects flat_type (string) and flat_types (array)
+    if (row.flat_types !== undefined) {
+      api.flat_type = row.flat_types;
+      if (Array.isArray(row.flat_types)) {
+        api.flat_types = row.flat_types.filter((v: any) => v && String(v).trim());
+      } else if (row.flat_types) {
+        api.flat_types = String(row.flat_types)
+          .split(",")
+          .map((v: string) => v.trim())
+          .filter((v: string) => v);
+      } else {
+        api.flat_types = [];
+      }
+    }
+
+    if (row.project_name !== undefined) api.name = row.project_name;
+
+    return api;
+  }
+
   // ===================================================
   // NORMALIZE TEXT
   // ===================================================
@@ -166,7 +246,7 @@ class ProjectService {
 
   private normalizeStatus(status: any): string {
     if (!status) {
-      return "active";
+      return "Ongoing";
     }
 
     const value = String(status)
@@ -174,26 +254,24 @@ class ProjectService {
       .toLowerCase();
 
     const aliases: Record<string, string> = {
-      active: "active",
-      activated: "active",
-      live: "active",
-      available: "active",
+      ongoing: "Ongoing",
+      inprogress: "Ongoing",
+      in_progress: "Ongoing",
+      progress: "Ongoing",
 
-      inactive: "inactive",
-      deactive: "inactive",
-      deactivated: "inactive",
+      planning: "Planning",
+      planned: "Planning",
 
-      upcoming: "upcoming",
-      coming: "upcoming",
+      completed: "Completed",
+      complete: "Completed",
+      finished: "Completed",
 
-      completed: "completed",
-      complete: "completed",
-      finished: "completed",
-
-      sold: "sold",
+      upcoming: "Upcoming",
+      coming: "Upcoming",
+      future: "Upcoming",
     };
 
-    return aliases[value] || value;
+    return aliases[value] || String(status).trim();
   }
 
   // ===================================================
@@ -423,45 +501,21 @@ class ProjectService {
     const now =
       new Date().toISOString();
 
-    const cleanName =
-      this.cleanProjectName(
-        project.project_name ||
+    const mapped =
+      this.mapApiToDb(project);
+
+    const projectName =
+      String(
+        mapped.project_name ||
+          project.project_name ||
           project.name ||
           "",
-      );
+      ).trim();
 
     return {
-      ...project,
+      ...mapped,
 
-      project_name: cleanName,
-
-      price: this.parseNumber(
-        project.price,
-      ),
-
-      total_units: this.parseNumber(
-        project.total_units,
-      ),
-
-      available_units:
-        this.parseNumber(
-          project.available_units,
-        ),
-
-      area_sqft: this.parseNumber(
-        project.area_sqft,
-      ),
-
-      flat_type:
-        project.flat_type
-          ? this.normalizeBHK(
-              project.flat_type,
-            )
-          : project.flat_type,
-
-      status: this.normalizeStatus(
-        project.status,
-      ),
+      project_name: projectName,
 
       is_deleted: false,
 
@@ -537,6 +591,13 @@ class ProjectService {
         .single();
 
       if (error) {
+        console.error("[PROJECT INSERT FULL ERROR]", {
+          message: error?.message,
+          code: error?.code,
+          details: error?.details,
+          hint: error?.hint,
+          full: error,
+        });
         this.handleError(
           "Project creation failed",
           error,
@@ -547,7 +608,7 @@ class ProjectService {
         success: true,
         message:
           "Project created successfully",
-        data,
+        data: this.mapDbToApi(data),
       };
     } catch (error: any) {
       console.error(
@@ -784,8 +845,7 @@ class ProjectService {
 
         query = query.or(
           [
-            `flat_type.ilike.%${bhk}%`,
-            `flat_types::text.ilike.%${bhk}%`,
+            `flat_types.ilike.%${bhk}%`,
           ].join(","),
         );
       }
@@ -931,7 +991,9 @@ class ProjectService {
         message:
           `${data?.length || 0} projects found`,
 
-        data: data || [],
+        data: (data || []).map((row: any) =>
+          this.mapDbToApi(row)
+        ),
 
         count:
           data?.length || 0,
@@ -1584,136 +1646,70 @@ class ProjectService {
   // UPDATE ALLOWED FIELDS
   // ===================================================
 
-  private getAllowedUpdateFields() {
-    return [
-      "project_name",
-      "project_type",
-      "location",
-      "city",
-      "state",
-      "pincode",
-      "description",
-      "flat_type",
-      "flat_types",
-      "total_units",
-      "available_units",
-      "area_sqft",
-      "price",
-      "status",
-      "brochure_url",
-      "thumbnail_url",
-      "gallery",
-      "amenities",
-      "possession_date",
-      "rera_number",
-      "contact_person",
-      "contact_number",
-    ];
-  }
-
-  // ===================================================
-  // PREPARE UPDATE
-  // ===================================================
-
   private prepareUpdateData(
     data: any,
   ) {
-    const allowed =
-      this.getAllowedUpdateFields();
+    const mapped =
+      this.mapApiToDb(data);
 
-    const clean: any = {};
-
-    for (
-      const field of allowed
-    ) {
-      if (
-        data[field] !==
-          undefined &&
-        data[field] !== null &&
-        data[field] !== ""
-      ) {
-        clean[field] =
-          data[field];
-      }
-    }
-
-    if (clean.project_name) {
-      clean.project_name =
-        this.cleanProjectName(
-          clean.project_name,
-        );
+    if (mapped.project_name) {
+      mapped.project_name =
+        String(mapped.project_name).trim();
     }
 
     if (
-      clean.flat_type
+      mapped.flat_type
     ) {
-      clean.flat_type =
+      mapped.flat_type =
         this.normalizeBHK(
-          clean.flat_type,
+          mapped.flat_type,
         );
     }
 
     if (
-      clean.price !==
-      undefined
+      mapped.price !==
+        undefined
     ) {
-      clean.price =
+      mapped.price =
         this.parseNumber(
-          clean.price,
+          mapped.price,
         );
     }
 
     if (
-      clean.total_units !==
-      undefined
+      mapped.sqft !==
+        undefined
     ) {
-      clean.total_units =
-        this.parseNumber(
-          clean.total_units,
-        );
+      mapped.sqft =
+        mapped.sqft == null
+          ? null
+          : String(mapped.sqft).trim();
     }
 
     if (
-      clean.available_units !==
-      undefined
+      mapped.status
     ) {
-      clean.available_units =
-        this.parseNumber(
-          clean.available_units,
-        );
-    }
-
-    if (
-      clean.area_sqft !==
-      undefined
-    ) {
-      clean.area_sqft =
-        this.parseNumber(
-          clean.area_sqft,
-        );
-    }
-
-    if (clean.status) {
-      clean.status =
+      mapped.status =
         this.normalizeStatus(
-          clean.status,
+          mapped.status,
         );
     }
 
-    clean.updated_at =
+    mapped.updated_at =
       new Date().toISOString();
 
-    return clean;
+    return mapped;
   }
 
   // ===================================================
   // UPDATE PROJECT
   // ===================================================
 
-  async updateProject(
+async updateProject(
     id: string | null,
-    companyId: string,
+    company_id: string,
     updateData: any,
+    allowProjectNameRename: boolean = false,
   ) {
     try {
       if (!companyId) {
@@ -1749,6 +1745,17 @@ class ProjectService {
           updateData,
         );
 
+      // Bug A fix: project_name is the entity identity. Never overwrite it
+      // from an AI-generated update payload — the LLM often echoes a stray/
+      // garbled name (e.g. a price-only update carried
+      // project_name:"Shiv Test wer Alpha").
+      // Explicit Admin UI edits pass allowProjectNameRename=true and may
+      // rename the project. AI callers never pass this flag, so the
+      // protection stays intact for all AI update paths.
+      if (!allowProjectNameRename) {
+        delete cleanData.project_name;
+      }
+
       if (
         Object.keys(
           cleanData,
@@ -1770,6 +1777,12 @@ class ProjectService {
           "Project not found",
         );
       }
+
+      console.error("[UPDATE PROJECT DEBUG]", {
+        originalRow: existing,
+        rawAiParams: updateData,
+        finalPayload: cleanData,
+      });
 
       const {
         data,
@@ -1803,7 +1816,7 @@ class ProjectService {
         success: true,
         message:
           "Project updated successfully",
-        data,
+        data: this.mapDbToApi(data),
       };
     } catch (error: any) {
       console.error(
@@ -1969,7 +1982,7 @@ class ProjectService {
         success: true,
         message:
           "Project deleted successfully",
-        data,
+        data: this.mapDbToApi(data),
       };
     } catch (error: any) {
       console.error(
@@ -2176,7 +2189,9 @@ class ProjectService {
       );
     }
 
-    return data || [];
+    return (data || []).map((row: any) =>
+      this.mapDbToApi(row)
+    );
   }
 
   // ===================================================
@@ -2214,7 +2229,7 @@ class ProjectService {
       );
     }
 
-    return data || null;
+    return data ? this.mapDbToApi(data) : null;
   }
 
   // ===================================================
@@ -2315,7 +2330,7 @@ class ProjectService {
             String(
               p.status || "",
             ).toLowerCase() ===
-            "active",
+            "ongoing",
         ).length,
 
       upcoming_projects:

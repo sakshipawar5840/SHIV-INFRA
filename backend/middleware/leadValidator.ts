@@ -41,20 +41,17 @@ export const leadSchema = Joi.object({
   status: Joi.string()
     .valid(
       "New",
-      "Contacted",
-      "Site Visit",
-      "Negotiation",
-      "Won",
+      "Follow Up",
+      "Hot",
+      "Closed",
       "Lost"
     )
     .default("New"),
-
 
   assigned_to: Joi.string()
     .uuid()
     .optional()
     .allow(null),
-
 
   remarks: Joi.string()
     .allow("")
@@ -105,20 +102,17 @@ export const updateLeadSchema = Joi.object({
   status:Joi.string()
     .valid(
       "New",
-      "Contacted",
-      "Site Visit",
-      "Negotiation",
-      "Won",
+      "Follow Up",
+      "Hot",
+      "Closed",
       "Lost"
     )
     .optional(),
-
 
   assigned_to:Joi.string()
     .uuid()
     .optional()
     .allow(null),
-
 
   remarks:Joi.string()
     .allow("")

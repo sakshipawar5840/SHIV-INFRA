@@ -26,6 +26,10 @@ import reportService from "./reportService.ts";
 
 import activityLogger from "./activityLoggerService.ts";
 
+import { createFollowUp, getPendingFollowUpForLead } from "./followUpService.ts";
+import { WhatsAppService } from "./whatsappService.ts";
+import { supabaseAdmin as supabase } from "../config/supabase.ts";
+
 // =====================================================
 // RESPONSE INTERFACE
 // =====================================================
@@ -52,7 +56,8 @@ export interface AIUserContext {
     role:
         | "ADMIN"
         | "ENGINEER"
-        | "CUSTOMER";
+        | "CUSTOMER"
+        | "SALES";
 
     channel?:
         | "WEB"
@@ -1482,9 +1487,10 @@ private validateRequest(
 
         }
 
-    }
+        }
 
-    return {
+
+        return {
         valid: true
     };
 
@@ -2158,7 +2164,7 @@ private async logActivity(
                 "state",
                 "pincode",
                 "description",
-                "flat_type",
+                "flat_types",
                 "total_units",
                 "available_units",
                 "area_sqft",
@@ -2297,7 +2303,7 @@ private async logActivity(
 
             const result =
                 await projectService.createProject(
-                    payload
+                    payload as any
                 );
 
             if (
@@ -3217,1532 +3223,6 @@ private async logActivity(
 // =====================================================
 // END PART 2 / 8
 // =====================================================
-// =====================================================
-// SHIVINFRA AI ACTION SERVICE V35
-// PART 3 / 8
-//
-// PROJECT AI ENGINE
-//
-// ADD PROJECT
-// SEARCH PROJECTS
-// SMART PROJECT RESOLVER
-// UPDATE PROJECT
-// DELETE PROJECT
-//
-// Production Ready
-// Multi-Tenant Safe
-// AI + WhatsApp Ready
-// =====================================================
-
-
-// =====================================================
-// ADD PROJECT
-// =====================================================
-
-private async addProject(
-    params: Record<string, any>,
-    companyId: string
-): Promise<AIActionResponse> {
-
-    try {
-
-        const projectName = this.safeString(
-            params.project_name ||
-            params.projectName ||
-            params.name
-        );
-
-        if (!projectName) {
-
-            return this.error(
-                "PROJECT_NAME_REQUIRED",
-                "Project name is required"
-            );
-
-        }
-
-
-        // -------------------------------------------------
-        // NORMALIZE PROJECT DATA
-        // -------------------------------------------------
-
-        const projectData: Record<string, any> = {
-
-            company_id: companyId,
-
-            project_name: projectName,
-
-            customer_id:
-                this.safeString(
-                    params.customer_id ||
-                    params.customerId
-                ) || null,
-
-            project_type:
-                this.safeString(
-                    params.project_type ||
-                    params.projectType ||
-                    params.type
-                ) || null,
-
-            location:
-                this.safeString(
-                    params.location
-                ) || null,
-
-            city:
-                this.safeString(
-                    params.city
-                ) || null,
-
-            state:
-                this.safeString(
-                    params.state
-                ) || null,
-
-            pincode:
-                this.safeString(
-                    params.pincode ||
-                    params.pin_code ||
-                    params.zip
-                ) || null,
-
-            description:
-                this.safeString(
-                    params.description ||
-                    params.details
-                ) || null,
-
-            flat_type:
-                this.safeString(
-                    params.flat_type ||
-                    params.flatType
-                ) || null,
-
-            total_units:
-                this.safeNumber(
-                    params.total_units ||
-                    params.totalUnits ||
-                    params.units
-                ),
-
-            available_units:
-                this.safeNumber(
-                    params.available_units ||
-                    params.availableUnits
-                ),
-
-            area_sqft:
-                this.safeNumber(
-                    params.area_sqft ||
-                    params.areaSqft ||
-                    params.area
-                ),
-
-            price:
-                this.safeNumber(
-                    params.price ||
-                    params.budget ||
-                    params.amount ||
-                    params.cost
-                ),
-
-            contact_person:
-                this.safeString(
-                    params.contact_person ||
-                    params.contactPerson
-                ) || null,
-
-            contact_number:
-                this.safeString(
-                    params.contact_number ||
-                    params.contactNumber ||
-                    params.phone ||
-                    params.mobile
-                ) || null,
-
-            status:
-                this.normalizeProjectStatus(
-                    params.status
-                )
-
-        };
-
-
-        // -------------------------------------------------
-        // REMOVE NULL / INVALID OPTIONAL VALUES
-        // -------------------------------------------------
-
-        Object.keys(projectData).forEach(
-            key => {
-
-                if (
-                    projectData[key] === null ||
-                    projectData[key] === undefined ||
-                    projectData[key] === ""
-                ) {
-
-                    if (key !== "company_id") {
-                        delete projectData[key];
-                    }
-
-                }
-
-            }
-        );
-
-
-        // -------------------------------------------------
-        // DUPLICATE PROJECT CHECK
-        // -------------------------------------------------
-
-        const existing =
-            await this.findProjectByName(
-                projectName,
-                companyId
-            );
-
-
-        if (existing) {
-
-            return {
-
-                success: false,
-
-                code: "PROJECT_ALREADY_EXISTS",
-
-                message:
-                    `Project "${projectName}" already exists`,
-
-                data: existing,
-
-                timestamp:
-                    new Date().toISOString()
-
-            };
-
-        }
-
-
-        // -------------------------------------------------
-        // CREATE PROJECT
-        // -------------------------------------------------
-
-        const service: any =
-            projectService as any;
-
-
-        let result: any;
-
-
-        if (
-            typeof service.createProject === "function"
-        ) {
-
-            result =
-                await service.createProject(
-                    projectData
-                );
-
-        }
-        else {
-
-            throw new Error(
-                "projectService.createProject is not available"
-            );
-
-        }
-
-
-        // -------------------------------------------------
-        // RESPONSE
-        // -------------------------------------------------
-
-        return {
-
-            success: true,
-
-            code: "PROJECT_CREATED",
-
-            message:
-                `Project "${projectName}" created successfully`,
-
-            data: result,
-
-            timestamp:
-                new Date().toISOString()
-
-        };
-
-    }
-    catch (error: any) {
-
-        console.error(
-            "ADD PROJECT ERROR",
-            {
-                company_id: companyId,
-                error: error?.message || error
-            }
-        );
-
-
-        return this.error(
-            "PROJECT_CREATE_FAILED",
-            error?.message ||
-            "Failed to create project"
-        );
-
-    }
-
-}
-
-
-// =====================================================
-// SEARCH PROJECTS
-// =====================================================
-
-private async searchProjects(
-    params: Record<string, any>,
-    companyId: string
-): Promise<AIActionResponse> {
-
-    try {
-
-        const query =
-            this.safeString(
-                params.query ||
-                params.search ||
-                params.search_query ||
-                params.project_name ||
-                params.projectName ||
-                params.name
-            );
-
-
-        const status =
-            this.safeString(
-                params.status
-            );
-
-
-        const city =
-            this.safeString(
-                params.city
-            );
-
-
-        const location =
-            this.safeString(
-                params.location
-            );
-
-
-        const service: any =
-            projectService as any;
-
-
-        let result: any;
-
-
-        // -------------------------------------------------
-        // PREFERRED SERVICE SEARCH
-        // -------------------------------------------------
-
-        if (
-            typeof service.searchProjects === "function"
-        ) {
-
-            result =
-                await service.searchProjects({
-
-                    company_id: companyId,
-
-                    query:
-                        query || undefined,
-
-                    status:
-                        status || undefined,
-
-                    city:
-                        city || undefined,
-
-                    location:
-                        location || undefined
-
-                });
-
-        }
-
-
-        // -------------------------------------------------
-        // FALLBACK: GET ALL PROJECTS
-        // -------------------------------------------------
-
-        else if (
-            typeof service.getProjects === "function"
-        ) {
-
-            result =
-                await service.getProjects(
-                    companyId
-                );
-
-        }
-
-
-        else if (
-            typeof service.getAllProjects === "function"
-        ) {
-
-            result =
-                await service.getAllProjects(
-                    companyId
-                );
-
-        }
-
-
-        else {
-
-            throw new Error(
-                "No project search method available"
-            );
-
-        }
-
-
-        // -------------------------------------------------
-        // NORMALIZE ARRAY
-        // -------------------------------------------------
-
-        const projects =
-            this.extractArrayResult(
-                result
-            );
-
-
-        // -------------------------------------------------
-        // LOCAL FILTER
-        //
-        // Used when service returns all records.
-        // -------------------------------------------------
-
-        let filtered =
-            projects;
-
-
-        if (query) {
-
-            const normalizedQuery =
-                this.normalizeText(query);
-
-
-            filtered =
-                filtered.filter(
-                    (project: any) => {
-
-                        const searchable = [
-
-                            project?.project_name,
-
-                            project?.name,
-
-                            project?.location,
-
-                            project?.city,
-
-                            project?.state,
-
-                            project?.project_type,
-
-                            project?.description
-
-                        ]
-                            .filter(Boolean)
-                            .map(
-                                value =>
-                                    this.normalizeText(value)
-                            )
-                            .join(" ");
-
-
-                        return searchable.includes(
-                            normalizedQuery
-                        );
-
-                    }
-                );
-
-        }
-
-
-        if (status) {
-
-            const normalizedStatus =
-                this.normalizeText(status);
-
-
-            filtered =
-                filtered.filter(
-                    (project: any) =>
-                        this.normalizeText(
-                            project?.status
-                        ) === normalizedStatus
-                );
-
-        }
-
-
-        if (city) {
-
-            const normalizedCity =
-                this.normalizeText(city);
-
-
-            filtered =
-                filtered.filter(
-                    (project: any) =>
-                        this.normalizeText(
-                            project?.city
-                        ).includes(
-                            normalizedCity
-                        )
-                );
-
-        }
-
-
-        // -------------------------------------------------
-        // RESULT
-        // -------------------------------------------------
-
-        return {
-
-            success: true,
-
-            code: "PROJECTS_FOUND",
-
-            message:
-                filtered.length
-                    ? `${filtered.length} project(s) found`
-                    : "No projects found",
-
-            data: {
-
-                count:
-                    filtered.length,
-
-                projects:
-                    filtered
-
-            },
-
-            timestamp:
-                new Date().toISOString()
-
-        };
-
-    }
-    catch (error: any) {
-
-        console.error(
-            "SEARCH PROJECTS ERROR",
-            {
-                company_id: companyId,
-                error: error?.message || error
-            }
-        );
-
-
-        return this.error(
-            "PROJECT_SEARCH_FAILED",
-            error?.message ||
-            "Failed to search projects"
-        );
-
-    }
-
-}
-
-
-// =====================================================
-// SMART PROJECT RESOLVER
-//
-// Supports:
-//
-// id
-// project_id
-// project name
-// partial project name
-// query
-// =====================================================
-
-private async resolveProject(
-    params: Record<string, any>,
-    companyId: string
-): Promise<any | null> {
-
-    try {
-
-        const directId =
-            this.safeString(
-                params.id ||
-                params.project_id ||
-                params.projectId
-            );
-
-
-        const name =
-            this.safeString(
-                params.project_name ||
-                params.projectName ||
-                params.name ||
-                params.query
-            );
-
-
-        const service: any =
-            projectService as any;
-
-
-        // -------------------------------------------------
-        // 1. DIRECT ID
-        // -------------------------------------------------
-
-        if (directId) {
-
-            if (
-                this.validateUUID(directId)
-            ) {
-
-                if (
-                    typeof service.getProjectById ===
-                    "function"
-                ) {
-
-                    const project =
-                        await service.getProjectById(
-                            directId,
-                            companyId
-                        );
-
-
-                    if (
-                        project &&
-                        this.belongsToCompany(
-                            project,
-                            companyId
-                        )
-                    ) {
-
-                        return project;
-
-                    }
-
-                }
-
-
-                if (
-                    typeof service.getProject ===
-                    "function"
-                ) {
-
-                    const project =
-                        await service.getProject(
-                            directId,
-                            companyId
-                        );
-
-
-                    if (
-                        project &&
-                        this.belongsToCompany(
-                            project,
-                            companyId
-                        )
-                    ) {
-
-                        return project;
-
-                    }
-
-                }
-
-            }
-
-        }
-
-
-        // -------------------------------------------------
-        // 2. PROJECT NAME
-        // -------------------------------------------------
-
-        if (!name) {
-
-            return null;
-
-        }
-
-
-        const normalizedName =
-            this.normalizeText(name);
-
-
-        // -------------------------------------------------
-        // EXACT NAME SEARCH
-        // -------------------------------------------------
-
-        const exact =
-            await this.findProjectByName(
-                name,
-                companyId
-            );
-
-
-        if (exact) {
-
-            return exact;
-
-        }
-
-
-        // -------------------------------------------------
-        // FALLBACK SEARCH
-        // -------------------------------------------------
-
-        let projects: any[] = [];
-
-
-        if (
-            typeof service.searchProjects ===
-            "function"
-        ) {
-
-            const result =
-                await service.searchProjects({
-
-                    company_id: companyId,
-
-                    query: name
-
-                });
-
-
-            projects =
-                this.extractArrayResult(
-                    result
-                );
-
-        }
-        else if (
-            typeof service.getProjects ===
-            "function"
-        ) {
-
-            const result =
-                await service.getProjects(
-                    companyId
-                );
-
-
-            projects =
-                this.extractArrayResult(
-                    result
-                );
-
-        }
-        else if (
-            typeof service.getAllProjects ===
-            "function"
-        ) {
-
-            const result =
-                await service.getAllProjects(
-                    companyId
-                );
-
-
-            projects =
-                this.extractArrayResult(
-                    result
-                );
-
-        }
-
-
-        projects =
-            projects.filter(
-                project =>
-                    this.belongsToCompany(
-                        project,
-                        companyId
-                    )
-            );
-
-
-        if (!projects.length) {
-
-            return null;
-
-        }
-
-
-        // -------------------------------------------------
-        // EXACT NORMALIZED MATCH
-        // -------------------------------------------------
-
-        const exactNormalized =
-            projects.find(
-                project =>
-                    this.normalizeText(
-                        project?.project_name ||
-                        project?.name
-                    ) === normalizedName
-            );
-
-
-        if (exactNormalized) {
-
-            return exactNormalized;
-
-        }
-
-
-        // -------------------------------------------------
-        // PARTIAL MATCH
-        // -------------------------------------------------
-
-        const partialMatches =
-            projects.filter(
-                project => {
-
-                    const projectName =
-                        this.normalizeText(
-                            project?.project_name ||
-                            project?.name
-                        );
-
-
-                    return (
-                        projectName.includes(
-                            normalizedName
-                        ) ||
-                        normalizedName.includes(
-                            projectName
-                        )
-                    );
-
-                }
-            );
-
-
-        if (
-            partialMatches.length === 1
-        ) {
-
-            return partialMatches[0];
-
-        }
-
-
-        // -------------------------------------------------
-        // TOKEN MATCH
-        //
-        // Example:
-        // "Shiv Residency Phase 1"
-        // "update Shiv Residency"
-        // -------------------------------------------------
-
-        const queryTokens =
-            normalizedName
-                .split(" ")
-                .filter(
-                    token =>
-                        token.length >= 2
-                );
-
-
-        if (queryTokens.length) {
-
-            const tokenMatches =
-                projects.filter(
-                    project => {
-
-                        const projectName =
-                            this.normalizeText(
-                                project?.project_name ||
-                                project?.name
-                            );
-
-
-                        const matched =
-                            queryTokens.filter(
-                                token =>
-                                    projectName.includes(
-                                        token
-                                    )
-                            ).length;
-
-
-                        return (
-                            matched >=
-                            Math.max(
-                                1,
-                                Math.ceil(
-                                    queryTokens.length *
-                                    0.6
-                                )
-                            )
-                        );
-
-                    }
-                );
-
-
-            if (
-                tokenMatches.length === 1
-            ) {
-
-                return tokenMatches[0];
-
-            }
-
-        }
-
-
-        // -------------------------------------------------
-        // AMBIGUOUS RESULT
-        //
-        // Do not randomly update/delete.
-        // -------------------------------------------------
-
-        return null;
-
-    }
-    catch (error: any) {
-
-        console.error(
-            "PROJECT RESOLVER ERROR",
-            {
-                company_id: companyId,
-                error: error?.message || error
-            }
-        );
-
-        return null;
-
-    }
-
-}
-
-
-// =====================================================
-// FIND PROJECT BY NAME
-// =====================================================
-
-private async findProjectByName(
-    projectName: string,
-    companyId: string
-): Promise<any | null> {
-
-    try {
-
-        const name =
-            this.safeString(
-                projectName
-            );
-
-
-        if (!name) {
-
-            return null;
-
-        }
-
-
-        const service: any =
-            projectService as any;
-
-
-        // -------------------------------------------------
-        // DIRECT SERVICE METHOD
-        // -------------------------------------------------
-
-        if (
-            typeof service.getProjectByName ===
-            "function"
-        ) {
-
-            const result =
-                await service.getProjectByName(
-                    name,
-                    companyId
-                );
-
-
-            if (
-                result &&
-                this.belongsToCompany(
-                    result,
-                    companyId
-                )
-            ) {
-
-                return result;
-
-            }
-
-        }
-
-
-        // -------------------------------------------------
-        // SEARCH SERVICE
-        // -------------------------------------------------
-
-        if (
-            typeof service.searchProjects ===
-            "function"
-        ) {
-
-            const result =
-                await service.searchProjects({
-
-                    company_id: companyId,
-
-                    query: name
-
-                });
-
-
-            const projects =
-                this.extractArrayResult(
-                    result
-                );
-
-
-            const normalized =
-                this.normalizeText(
-                    name
-                );
-
-
-            const exact =
-                projects.find(
-                    (project: any) =>
-                        this.belongsToCompany(
-                            project,
-                            companyId
-                        ) &&
-                        this.normalizeText(
-                            project?.project_name ||
-                            project?.name
-                        ) === normalized
-                );
-
-
-            return exact || null;
-
-        }
-
-
-        return null;
-
-    }
-    catch (error: any) {
-
-        console.error(
-            "FIND PROJECT BY NAME ERROR",
-            {
-                company_id: companyId,
-                error: error?.message || error
-            }
-        );
-
-
-        return null;
-
-    }
-
-}
-
-
-// =====================================================
-// UPDATE PROJECT
-// =====================================================
-
-private async updateProject(
-    params: Record<string, any>,
-    companyId: string
-): Promise<AIActionResponse> {
-
-    try {
-
-        const project =
-            await this.resolveProject(
-                params,
-                companyId
-            );
-
-
-        if (!project) {
-
-            return this.error(
-                "PROJECT_NOT_FOUND",
-                "Project not found or project name is ambiguous"
-            );
-
-        }
-
-
-        const projectId =
-            this.safeString(
-                project.id ||
-                project.project_id
-            );
-
-
-        if (!projectId) {
-
-            return this.error(
-                "PROJECT_ID_MISSING",
-                "Project id could not be resolved"
-            );
-
-        }
-
-
-        // -------------------------------------------------
-        // BUILD UPDATE PAYLOAD
-        // -------------------------------------------------
-
-        const updateData:
-            Record<string, any> = {};
-
-
-        const fields: Record<string, string[]> = {
-
-            project_name: [
-                "project_name",
-                "projectName",
-                "name"
-            ],
-
-            customer_id: [
-                "customer_id",
-                "customerId"
-            ],
-
-            project_type: [
-                "project_type",
-                "projectType",
-                "type"
-            ],
-
-            location: [
-                "location"
-            ],
-
-            city: [
-                "city"
-            ],
-
-            state: [
-                "state"
-            ],
-
-            pincode: [
-                "pincode",
-                "pin_code",
-                "zip"
-            ],
-
-            description: [
-                "description",
-                "details"
-            ],
-
-            flat_type: [
-                "flat_type",
-                "flatType"
-            ],
-
-            total_units: [
-                "total_units",
-                "totalUnits",
-                "units"
-            ],
-
-            available_units: [
-                "available_units",
-                "availableUnits"
-            ],
-
-            area_sqft: [
-                "area_sqft",
-                "areaSqft",
-                "area"
-            ],
-
-            price: [
-                "price",
-                "budget",
-                "amount",
-                "cost"
-            ],
-
-            contact_person: [
-                "contact_person",
-                "contactPerson"
-            ],
-
-            contact_number: [
-                "contact_number",
-                "contactNumber",
-                "phone",
-                "mobile"
-            ],
-
-            status: [
-                "status"
-            ]
-
-        };
-
-
-        Object.entries(fields).forEach(
-            ([databaseField, aliases]) => {
-
-                const found =
-                    aliases.find(
-                        alias =>
-                            params[alias] !==
-                            undefined &&
-                            params[alias] !== null &&
-                            params[alias] !== ""
-                    );
-
-
-                if (!found) {
-
-                    return;
-
-                }
-
-
-                let value =
-                    params[found];
-
-
-                if (
-                    [
-                        "project_name",
-                        "project_type",
-                        "location",
-                        "city",
-                        "state",
-                        "pincode",
-                        "description",
-                        "flat_type",
-                        "contact_person",
-                        "contact_number"
-                    ].includes(
-                        databaseField
-                    )
-                ) {
-
-                    value =
-                        this.safeString(
-                            value
-                        );
-
-                }
-
-
-                if (
-                    [
-                        "total_units",
-                        "available_units",
-                        "area_sqft",
-                        "price"
-                    ].includes(
-                        databaseField
-                    )
-                ) {
-
-                    value =
-                        this.safeNumber(
-                            value
-                        );
-
-
-                    if (value === null) {
-
-                        return;
-
-                    }
-
-                }
-
-
-                if (
-                    databaseField ===
-                    "status"
-                ) {
-
-                    value =
-                        this.normalizeProjectStatus(
-                            value
-                        );
-
-                }
-
-
-                updateData[
-                    databaseField
-                ] = value;
-
-            }
-        );
-
-
-        // -------------------------------------------------
-        // NEVER UPDATE COMPANY ID
-        // -------------------------------------------------
-
-        delete updateData.company_id;
-        delete updateData.id;
-
-
-        if (
-            !Object.keys(updateData).length
-        ) {
-
-            return this.error(
-                "NO_UPDATE_FIELDS",
-                "No project fields provided for update"
-            );
-
-        }
-
-
-        // -------------------------------------------------
-        // DUPLICATE NAME PROTECTION
-        // -------------------------------------------------
-
-        if (
-            updateData.project_name
-        ) {
-
-            const existing =
-                await this.findProjectByName(
-                    updateData.project_name,
-                    companyId
-                );
-
-
-            if (
-                existing &&
-                String(
-                    existing.id
-                ) !== String(projectId)
-            ) {
-
-                return this.error(
-                    "PROJECT_NAME_EXISTS",
-                    `Another project named "${updateData.project_name}" already exists`
-                );
-
-            }
-
-        }
-
-
-        // -------------------------------------------------
-        // UPDATE
-        // -------------------------------------------------
-
-        const service: any =
-            projectService as any;
-
-
-        let result: any;
-
-
-        if (
-            typeof service.updateProject ===
-            "function"
-        ) {
-
-            result =
-                await service.updateProject(
-                    projectId,
-                    updateData,
-                    companyId
-                );
-
-        }
-        else {
-
-            throw new Error(
-                "projectService.updateProject is not available"
-            );
-
-        }
-
-
-        return {
-
-            success: true,
-
-            code: "PROJECT_UPDATED",
-
-            message:
-                `Project "${project.project_name || project.name || projectId}" updated successfully`,
-
-            data: result,
-
-            timestamp:
-                new Date().toISOString()
-
-        };
-
-    }
-    catch (error: any) {
-
-        console.error(
-            "UPDATE PROJECT ERROR",
-            {
-                company_id: companyId,
-                error: error?.message || error
-            }
-        );
-
-
-        return this.error(
-            "PROJECT_UPDATE_FAILED",
-            error?.message ||
-            "Failed to update project"
-        );
-
-    }
-
-}
-
-
-// =====================================================
-// DELETE PROJECT
-// =====================================================
-
-private async deleteProject(
-    params: Record<string, any>,
-    companyId: string
-): Promise<AIActionResponse> {
-
-    try {
-
-        const project =
-            await this.resolveProject(
-                params,
-                companyId
-            );
-
-
-        if (!project) {
-
-            return this.error(
-                "PROJECT_NOT_FOUND",
-                "Project not found or project name is ambiguous"
-            );
-
-        }
-
-
-        const projectId =
-            this.safeString(
-                project.id ||
-                project.project_id
-            );
-
-
-        if (!projectId) {
-
-            return this.error(
-                "PROJECT_ID_MISSING",
-                "Project id could not be resolved"
-            );
-
-        }
-
-
-        const service: any =
-            projectService as any;
-
-
-        if (
-            typeof service.deleteProject !==
-            "function"
-        ) {
-
-            throw new Error(
-                "projectService.deleteProject is not available"
-            );
-
-        }
-
-
-        await service.deleteProject(
-            projectId,
-            companyId
-        );
-
-
-        return {
-
-            success: true,
-
-            code: "PROJECT_DELETED",
-
-            message:
-                `Project "${project.project_name || project.name || projectId}" deleted successfully`,
-
-            data: {
-
-                id:
-                    projectId,
-
-                project_name:
-                    project.project_name ||
-                    project.name ||
-                    null
-
-            },
-
-            timestamp:
-                new Date().toISOString()
-
-        };
-
-    }
-    catch (error: any) {
-
-        console.error(
-            "DELETE PROJECT ERROR",
-            {
-                company_id: companyId,
-                error: error?.message || error
-            }
-        );
-
-
-        return this.error(
-            "PROJECT_DELETE_FAILED",
-            error?.message ||
-            "Failed to delete project"
-        );
-
-    }
-
-}
 
 
 // =====================================================
@@ -4925,6 +3405,459 @@ private belongsToCompany(
         projectCompanyId ===
         String(companyId).trim()
     );
+
+}
+
+
+// =====================================================
+// EXPENSE AI ENGINE
+// =====================================================
+
+// =====================================================
+// ADD EXPENSE
+// =====================================================
+
+private async addExpense(
+    params: Record<string, any>,
+    companyId: string,
+    userId: string | null
+): Promise<AIActionResponse> {
+
+    try {
+
+        const amount =
+            this.safeNumber(
+                params.amount ||
+                params.price ||
+                params.cost ||
+                params.total
+            );
+
+        if (
+            amount === null ||
+            amount <= 0
+        ) {
+
+            return this.error(
+                "INVALID_EXPENSE_AMOUNT",
+                "Valid expense amount is required"
+            );
+
+        }
+
+        const title =
+            this.safeString(
+                params.title ||
+                params.expense_title ||
+                params.name
+            );
+
+        const category =
+            this.safeString(
+                params.category ||
+                params.expense_category ||
+                params.expenseCategory ||
+                "General"
+            );
+
+        const description =
+            this.safeString(
+                params.description ||
+                params.remarks ||
+                params.note
+            );
+
+        const vendor =
+            this.safeString(
+                params.vendor ||
+                params.vendor_name ||
+                params.supplier
+            );
+
+        const paymentMethod =
+            this.safeString(
+                params.payment_method ||
+                params.paymentMode ||
+                params.payment_mode ||
+                params.paymentmode
+            );
+
+        const expenseDate =
+            this.safeString(
+                params.expense_date ||
+                params.date ||
+                params.expenseDate
+            );
+
+        const projectId =
+            this.safeString(
+                params.project_id ||
+                params.projectId
+            );
+
+        const billId =
+            this.safeString(
+                params.bill_id ||
+                params.billId
+            );
+
+        const payload: Record<string, any> = {
+
+            company_id: companyId,
+
+            amount,
+
+            expense_title: title || "Expense",
+
+            expense_category: category || "General",
+
+            description: description || null,
+
+            vendor: vendor || null,
+
+            payment_method: paymentMethod || null,
+
+            expense_date: expenseDate || null,
+
+            project_id: projectId || null,
+
+            bill_id: billId || null,
+
+            created_by: userId
+
+        };
+
+        const result =
+            await expenseService.createExpense(
+                payload as any
+            );
+
+        return {
+
+            success: true,
+
+            code: "EXPENSE_CREATED",
+
+            message: "Expense added successfully",
+
+            data: result,
+
+            timestamp:
+                new Date().toISOString()
+
+        };
+
+    }
+    catch (error: any) {
+
+        console.error(
+            "ADD EXPENSE ERROR",
+            error?.message || error
+        );
+
+        return this.error(
+            "EXPENSE_CREATE_FAILED",
+            error?.message ||
+            "Failed to add expense"
+        );
+
+    }
+
+}
+
+
+// =====================================================
+// SEARCH EXPENSES
+// =====================================================
+
+private async searchExpenses(
+    params: Record<string, any>,
+    companyId: string
+): Promise<AIActionResponse> {
+
+    try {
+
+        const query =
+            this.safeString(
+                params.query ||
+                params.message ||
+                params.text ||
+                params.search
+            );
+
+        const category =
+            this.safeString(
+                params.category ||
+                params.expense_category
+            );
+
+        const projectId =
+            this.safeString(
+                params.project_id ||
+                params.projectId
+            );
+
+        const searchParams: Record<string, any> = {
+
+            company_id: companyId
+
+        };
+
+        if (query) {
+
+            searchParams.query = query;
+
+        }
+
+        if (category) {
+
+            searchParams.category = category;
+
+        }
+
+        if (projectId) {
+
+            searchParams.project_id = projectId;
+
+        }
+
+        const result =
+            await expenseService.aiSearchExpenses(
+                companyId,
+                searchParams
+            );
+
+        const data =
+            Array.isArray(result)
+                ? result
+                : result?.data || [];
+
+        return {
+
+            success: true,
+
+            code: "EXPENSES_FOUND",
+
+            message:
+                data.length > 0
+                    ? `Found ${data.length} expense(s)`
+                    : "No expenses found",
+
+            data,
+
+            timestamp:
+                new Date().toISOString()
+
+        };
+
+    }
+    catch (error: any) {
+
+        console.error(
+            "SEARCH EXPENSES ERROR",
+            error?.message || error
+        );
+
+        return this.error(
+            "EXPENSE_SEARCH_FAILED",
+            error?.message ||
+            "Failed to search expenses"
+        );
+
+    }
+
+}
+
+
+// =====================================================
+// UPDATE EXPENSE
+// =====================================================
+
+private async updateExpense(
+    params: Record<string, any>,
+    companyId: string
+): Promise<AIActionResponse> {
+
+    try {
+
+        const expenseId =
+            this.safeString(
+                params.id ||
+                params.expense_id ||
+                params.expenseId
+            );
+
+        if (!expenseId) {
+
+            return this.error(
+                "EXPENSE_ID_REQUIRED",
+                "Expense id is required"
+            );
+
+        }
+
+        const allowedFields: Record<string, any> = {
+
+            amount: params.amount,
+
+            title: params.title || params.expense_title,
+
+            category: params.category || params.expense_category,
+
+            description: params.description,
+
+            vendor: params.vendor,
+
+            payment_method: params.payment_method || params.paymentMode,
+
+            expense_date: params.expense_date || params.date,
+
+            project_id: params.project_id || params.projectId,
+
+            bill_id: params.bill_id || params.billId,
+
+            remarks: params.remarks
+
+        };
+
+        const cleanUpdates: Record<string, any> = {};
+
+        for (
+            const [
+                key,
+                value
+            ] of Object.entries(
+                allowedFields
+            )
+        ) {
+
+            if (
+                value !== undefined &&
+                value !== null &&
+                value !== ""
+            ) {
+
+                cleanUpdates[key] = value;
+
+            }
+
+        }
+
+        if (
+            Object.keys(cleanUpdates).length === 0
+        ) {
+
+            return this.error(
+                "NO_UPDATE_FIELDS",
+                "No update fields provided"
+            );
+
+        }
+
+        const result =
+            await expenseService.updateExpense(
+                expenseId,
+                companyId,
+                cleanUpdates
+            );
+
+        return {
+
+            success: true,
+
+            code: "EXPENSE_UPDATED",
+
+            message: "Expense updated successfully",
+
+            data: result,
+
+            timestamp:
+                new Date().toISOString()
+
+        };
+
+    }
+    catch (error: any) {
+
+        console.error(
+            "UPDATE EXPENSE ERROR",
+            error?.message || error
+        );
+
+        return this.error(
+            "EXPENSE_UPDATE_FAILED",
+            error?.message ||
+            "Failed to update expense"
+        );
+
+    }
+
+}
+
+
+// =====================================================
+// DELETE EXPENSE
+// =====================================================
+
+private async deleteExpense(
+    params: Record<string, any>,
+    companyId: string
+): Promise<AIActionResponse> {
+
+    try {
+
+        const expenseId =
+            this.safeString(
+                params.id ||
+                params.expense_id ||
+                params.expenseId
+            );
+
+        if (!expenseId) {
+
+            return this.error(
+                "EXPENSE_ID_REQUIRED",
+                "Expense id is required"
+            );
+
+        }
+
+        const result =
+            await expenseService.deleteExpense(
+                expenseId,
+                companyId
+            );
+
+        return {
+
+            success: true,
+
+            code: "EXPENSE_DELETED",
+
+            message: "Expense deleted successfully",
+
+            data: { id: expenseId },
+
+            timestamp:
+                new Date().toISOString()
+
+        };
+
+    }
+    catch (error: any) {
+
+        console.error(
+            "DELETE EXPENSE ERROR",
+            error?.message || error
+        );
+
+        return this.error(
+            "EXPENSE_DELETE_FAILED",
+            error?.message ||
+            "Failed to delete expense"
+        );
+
+    }
 
 }
 
@@ -7026,7 +5959,7 @@ private async addLead(
 
         const result =
             await leadService.createLead(
-                payload
+                payload as any
             );
 
         if (!result) {
@@ -7067,6 +6000,43 @@ private async addLead(
                     new Date().toISOString()
 
             };
+
+        }
+
+        if (phone) {
+
+            const existingFollowUp =
+                await getPendingFollowUpForLead(
+                    result?.id || result?.data?.id,
+                    companyId
+                );
+
+
+            if (!existingFollowUp) {
+
+                const requirement =
+                    params.requirement ||
+                    params.name ||
+                    params.description ||
+                    "our services";
+
+
+                await createFollowUp({
+
+                    company_id: companyId,
+
+                    lead_id: result?.id || result?.data?.id,
+
+                    phone: phone,
+
+                    message:
+                        "Thank you for your enquiry regarding " +
+                        requirement +
+                        ". Our team will contact you shortly."
+
+                });
+
+            }
 
         }
 
@@ -7243,7 +6213,7 @@ private async searchLeads(
 
         const result =
             await leadService.getLeads(
-                searchParams
+                companyId
             );
 
         const data =
@@ -7430,17 +6400,9 @@ private async resolveLead(
         try {
 
             const result =
-                await leadService.getLeads({
-
-                    company_id:
-                        safeCompanyId,
-
-                    customer_id:
-                        customerId,
-
-                    limit: 10
-
-                });
+                await leadService.getLeads(
+                    safeCompanyId
+                );
 
             const data =
                 result?.data ??
@@ -7489,16 +6451,9 @@ private async resolveLead(
         try {
 
             const result =
-                await leadService.getLeads({
-
-                    company_id:
-                        safeCompanyId,
-
-                    query,
-
-                    limit: 20
-
-                });
+                await leadService.getLeads(
+                    safeCompanyId
+                );
 
             const data =
                 result?.data ??
@@ -7594,17 +6549,9 @@ private async findLeadByPhone(
         }
 
         const result =
-            await leadService.getLeads({
-
-                company_id:
-                    companyId,
-
-                phone:
-                    normalizedPhone,
-
-                limit: 10
-
-            });
+            await leadService.getLeads(
+                companyId
+            );
 
         const data =
             result?.data ??
@@ -7980,6 +6927,7 @@ private async updateLead(
         const result =
             await leadService.updateLead(
                 leadId,
+                safeCompanyId,
                 updates
             );
 
@@ -8021,7 +6969,6 @@ private async updateLead(
                 "Lead updated successfully",
 
             data:
-                result?.data ||
                 result,
 
             timestamp:
@@ -8123,7 +7070,6 @@ private async deleteLead(
                 success: false,
 
                 code:
-                    result?.code ||
                     "LEAD_DELETE_FAILED",
 
                 message:
@@ -8131,7 +7077,6 @@ private async deleteLead(
                     "Failed to delete lead",
 
                 data:
-                    result?.data ||
                     result,
 
                 timestamp:
@@ -8152,8 +7097,9 @@ private async deleteLead(
                 "Lead deleted successfully",
 
             data:
-                result?.data ||
-                result,
+                result?.id
+                    ? { id: result.id }
+                    : result,
 
             timestamp:
                 new Date().toISOString()
@@ -8226,19 +7172,21 @@ private async uploadBill(
 
             company_id: companyId,
 
-            file_url: fileUrl,
+            bill_file_url: fileUrl,
 
-            file_name:
+            vendor_name:
                 this.safeString(
-                    params.file_name ||
-                    params.filename ||
-                    params.name
-                ) || null,
-
-            vendor:
-                this.safeString(
+                    params.vendor_name ||
                     params.vendor ||
                     params.supplier
+                ) || null,
+
+            material_name:
+                this.safeString(
+                    params.material_name ||
+                    params.material ||
+                    params.category ||
+                    params.bill_category
                 ) || null,
 
             amount:
@@ -8246,6 +7194,13 @@ private async uploadBill(
                     params.amount ||
                     params.total ||
                     params.price
+                ),
+
+            gst_amount:
+                this.safeNumber(
+                    params.gst_amount ||
+                    params.gst_number ||
+                    0
                 ),
 
             bill_number:
@@ -8260,16 +7215,15 @@ private async uploadBill(
                 params.invoice_date ||
                 null,
 
-            category:
-                this.safeString(
-                    params.category ||
-                    params.bill_category
-                ) || null,
+            payment_status:
+                params.payment_status ||
+                "Pending",
 
-            description:
+            remarks:
                 this.safeString(
+                    params.remarks ||
                     params.description ||
-                    params.remarks
+                    params.notes
                 ) || null
 
         };
@@ -8371,15 +7325,23 @@ private async searchBills(
                 typeof service?.searchBills === "function"
             ) {
 
+                const queryText =
+                    this.safeString(
+                        params.query ||
+                        params.message ||
+                        params.text ||
+                        params.search ||
+                        ""
+                    );
+
                 const result =
-                    await service.searchBills({
+                    await service.searchBills(
 
-                        ...params,
+                        companyId,
 
-                        company_id:
-                            companyId
+                        queryText
 
-                    });
+                    );
 
                 return {
 
@@ -8975,146 +7937,478 @@ private async getWhatsAppService(): Promise<any> {
 // CREATE BROADCAST
 // =====================================================
 
-private async createBroadcast(
-    params: Record<string, any>,
-    companyId: string
-): Promise<AIActionResponse> {
+    private async createBroadcast(
+        params: Record<string, any>,
+        companyId: string
+    ): Promise<AIActionResponse> {
 
-    try {
+        try {
 
-        const message =
-            this.safeString(
-                params.message ||
-                params.text
-            );
-
-
-        if (!message) {
-
-            return this.error(
-                "BROADCAST_MESSAGE_REQUIRED",
-                "Broadcast message is required"
-            );
-
-        }
+            const messageText =
+                this.safeString(
+                    params.message ||
+                    params.text
+                );
 
 
-        const whatsappService =
-            await this.getWhatsAppService();
+            if (!messageText) {
+
+                return this.error(
+                    "BROADCAST_MESSAGE_REQUIRED",
+                    "Broadcast message is required"
+                );
+
+            }
 
 
-        if (!whatsappService) {
+            const audience =
+                String(
+                    params.audience ||
+                    params.target ||
+                    "CUSTOMERS"
+                )
+                .toUpperCase();
 
-            return this.error(
-                "WHATSAPP_SERVICE_UNAVAILABLE",
-                "WhatsApp service is not configured"
-            );
 
-        }
+            const projectName =
+                params.project_name ||
+                params.project ||
+                null;
 
+            const city =
+                params.city ||
+                params.location ||
+                null;
 
-        const payload = {
-
-            company_id:
-                companyId,
-
-            message,
-
-            audience:
-                params.audience ||
-                params.target ||
-                "CUSTOMERS",
-
-            project_id:
-                params.project_id ||
-                null,
-
-            lead_status:
+            const leadStatus =
                 params.lead_status ||
-                null,
+                params.status ||
+                null;
 
-            scheduled_at:
-                params.scheduled_at ||
-                null
-
-        };
-
-
-        let result: any;
+            let recipients: Array<{
+                phone: string;
+                type: "customer" | "lead";
+                id: string;
+            }> = [];
 
 
-        if (
-            typeof whatsappService.createBroadcast ===
-            "function"
-        ) {
+            if (audience === "CUSTOMERS") {
 
-            result =
-                await whatsappService.createBroadcast(
-                    payload
+                const { data: customers } =
+                    await customerService.filterCustomers(
+                        companyId,
+                        {
+                            city,
+                            status: leadStatus
+                        }
+                    );
+
+                if (customers) {
+
+                    recipients.push(
+                        ...customers
+                            .filter(
+                                (c: any) =>
+                                    c.phone &&
+                                    String(c.phone).trim() !== ""
+                            )
+                            .map((c: any) => ({
+                                phone:
+                                    String(c.phone).trim(),
+                                type: "customer" as const,
+                                id: c.id
+                            }))
+                    );
+                }
+            } else if (audience === "LEADS") {
+
+                const { data: leads } =
+                    await leadService.filterLeads(
+                        companyId,
+                        {
+                            status: leadStatus,
+                            preferred_location: city
+                        }
+                    );
+
+                if (leads) {
+
+                    recipients.push(
+                        ...leads
+                            .filter(
+                                (l: any) =>
+                                    l.customers?.phone &&
+                                    String(l.customers.phone).trim() !== ""
+                            )
+                            .map((l: any) => ({
+                                phone:
+                                    String(l.customers.phone).trim(),
+                                type: "lead" as const,
+                                id: l.id
+                            }))
+                    );
+                }
+            }
+
+
+            const seenPhones =
+                new Set<string>();
+
+            const uniqueRecipients =
+                recipients.filter(
+                    (r) => {
+
+                        const normalized =
+                            String(r.phone)
+                                .replace(/\D/g, "")
+                                .slice(-10);
+
+                        if (
+                            seenPhones.has(
+                                normalized
+                            )
+                        ) {
+
+                            return false;
+                        }
+
+                        seenPhones.add(
+                            normalized
+                        );
+
+                        return true;
+                    }
                 );
 
-        }
-        else if (
-            typeof whatsappService.broadcast ===
-            "function"
-        ) {
 
-            result =
-                await whatsappService.broadcast(
-                    payload
+            if (
+                uniqueRecipients.length ===
+                0
+            ) {
+
+                return {
+
+                    success: false,
+
+                    code:
+                        "BROADCAST_NO_RECIPIENTS",
+
+                    message:
+                        "No valid recipients found for the specified audience",
+
+                    timestamp:
+                        new Date()
+                            .toISOString()
+
+                };
+            }
+
+
+            const { data: broadcast, error: broadcastError } =
+                await supabase
+                    .from(
+                        "broadcasts"
+                    )
+                    .insert({
+
+                        company_id:
+                            companyId,
+
+                        created_by:
+                            params.user_id ||
+                            null,
+
+                        message_text:
+                            messageText,
+
+                        audience:
+                            `${audience}${city ? ` (${city})` : ""}${leadStatus ? ` - ${leadStatus}` : ""}`,
+
+                        status:
+                            "Pending",
+
+                        recipient_count:
+                            uniqueRecipients.length
+
+                    })
+                    .select()
+                    .single();
+
+            if (
+                broadcastError ||
+                !broadcast
+            ) {
+
+                console.error(
+                    "[BROADCAST] Insert failed:",
+                    broadcastError
                 );
 
-        }
-        else {
+                return {
 
-            return this.error(
-                "BROADCAST_METHOD_UNAVAILABLE",
-                "Broadcast method is not available"
+                    success: false,
+
+                    code:
+                        "BROADCAST_SAVE_FAILED",
+
+                    message:
+                        "Failed to create broadcast record",
+
+                    timestamp:
+                        new Date()
+                            .toISOString()
+
+                };
+            }
+
+
+            const deliveryRecords: any[] = [];
+
+            let sentCount = 0;
+
+            let failedCount = 0;
+
+
+            for (
+                const recipient of
+                uniqueRecipients
+            ) {
+
+                try {
+
+                    const sent =
+                        await WhatsAppService.sendTextMessage(
+                            recipient.phone,
+                            messageText
+                        );
+
+                    deliveryRecords.push({
+
+                        broadcast_id:
+                            broadcast.id,
+
+                        company_id:
+                            companyId,
+
+                        phone:
+                            recipient.phone,
+
+                        recipient_type:
+                            recipient.type,
+
+                        recipient_id:
+                            recipient.id,
+
+                        status:
+                            sent
+                                ? "Sent"
+                                : "Failed",
+
+                        error:
+                            sent
+                                ? null
+                                : "Meta API dispatch failed",
+
+                        sent_at:
+                            sent
+                                ? new Date()
+                                    .toISOString()
+                                : null
+
+                    });
+
+                    if (sent) {
+
+                        sentCount++;
+                    } else {
+
+                        failedCount++;
+                    }
+
+                } catch (sendError: any) {
+
+                    deliveryRecords.push({
+
+                        broadcast_id:
+                            broadcast.id,
+
+                        company_id:
+                            companyId,
+
+                        phone:
+                            recipient.phone,
+
+                        recipient_type:
+                            recipient.type,
+
+                        recipient_id:
+                            recipient.id,
+
+                        status:
+                            "Failed",
+
+                        error:
+                            sendError?.message ||
+                            "Send failed",
+
+                        sent_at:
+                            null
+
+                    });
+
+                    failedCount++;
+                }
+            }
+
+
+            if (
+                deliveryRecords.length >
+                0
+            ) {
+
+                const { error: deliveryError } =
+                    await supabase
+                        .from(
+                            "broadcast_recipients"
+                        )
+                        .insert(
+                            deliveryRecords
+                        );
+
+                if (
+                    deliveryError
+                ) {
+
+                    console.error(
+                        "[BROADCAST] Delivery insert failed:",
+                        deliveryError
+                    );
+                }
+            }
+
+
+            const finalStatus =
+                failedCount ===
+                0
+                    ? "Sent"
+                    : sentCount > 0
+                        ? "Partial"
+                        : "Failed";
+
+            const { error: updateError } =
+                await supabase
+                    .from(
+                        "broadcasts"
+                    )
+                    .update({
+
+                        status:
+                            finalStatus,
+
+                        success_count:
+                            sentCount,
+
+                        failure_count:
+                            failedCount,
+
+                        completed_at:
+                            new Date()
+                                .toISOString()
+
+                    })
+                    .eq(
+                        "id",
+                        broadcast.id
+                    );
+
+            if (
+                updateError
+            ) {
+
+                console.error(
+                    "[BROADCAST] Status update failed:",
+                    updateError
+                );
+            }
+
+
+            return {
+
+                success:
+                    sentCount >
+                    0,
+
+                code:
+                    "BROADCAST_SENT",
+
+                message:
+                    `Broadcast sent to ${sentCount} recipients${failedCount > 0 ? `, ${failedCount} failed` : ""}`,
+
+                data: {
+
+                    broadcast_id:
+                        broadcast.id,
+
+                    audience,
+                    project_name:
+                        projectName ||
+                        null,
+                    city:
+                        city ||
+                        null,
+                    lead_status:
+                        leadStatus ||
+                        null,
+                    message:
+                        messageText,
+                    recipient_count:
+                        uniqueRecipients.length,
+                    sent_count:
+                        sentCount,
+                    failed_count:
+                        failedCount,
+                    status:
+                        finalStatus
+
+                },
+
+                timestamp:
+                    new Date()
+                        .toISOString()
+
+            };
+
+        } catch (error: any) {
+
+            console.error(
+                "[BROADCAST] Error:",
+                error
             );
 
+            return {
+
+                success: false,
+
+                code:
+                    "BROADCAST_ERROR",
+
+                message:
+                    error?.message ||
+                    "Broadcast failed",
+
+                timestamp:
+                    new Date()
+                        .toISOString()
+
+            };
         }
-
-
-        return {
-
-            success: true,
-
-            code: "BROADCAST_CREATED",
-
-            message:
-                "Broadcast created successfully",
-
-            data: result,
-
-            timestamp:
-                new Date().toISOString()
-
-        };
-
-    }
-    catch (error: any) {
-
-        console.error(
-            "CREATE BROADCAST ERROR",
-            error?.message || error
-        );
-
-        return this.error(
-            "BROADCAST_FAILED",
-            error?.message ||
-            "Failed to create broadcast"
-        );
-
     }
 
-}
+    // =====================================================
+    // CREATE FOLLOW-UP
+    // =====================================================
 
-
-// =====================================================
-// CREATE FOLLOW-UP
-// =====================================================
-
-private async createFollowUp(
+    private async createFollowUp(
     params: Record<string, any>,
     companyId: string
 ): Promise<AIActionResponse> {
@@ -10953,6 +10247,25 @@ public getVersion(): string {
 public getServiceName(): string {
 
     return "SHIVINFRA AI ACTION SERVICE";
+
+}
+
+
+public health(): Record<string, any> {
+
+    return {
+
+        status: "ACTIVE",
+
+        service:
+            "SHIVINFRA AI ACTION SERVICE",
+
+        version: "V35",
+
+        timestamp:
+            new Date().toISOString()
+
+    };
 
 }
 

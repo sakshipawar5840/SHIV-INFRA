@@ -4,19 +4,30 @@ dotenv.config();
 
 const PHONE_NUMBER_ID = process.env.META_WHATSAPP_PHONE_NUMBER_ID;
 const SYSTEM_TOKEN = process.env.META_WHATSAPP_TOKEN;
+const WHATSAPP_API_VERSION = process.env.WHATSAPP_API_VERSION || process.env.META_WHATSAPP_API_VERSION || "v18.0";
+const WHATSAPP_MOCK_MODE = process.env.WHATSAPP_MOCK_MODE === "true";
+const NODE_ENV = process.env.NODE_ENV || "development";
+
+function isWhatsAppConfigured(): boolean {
+  return !!(PHONE_NUMBER_ID && SYSTEM_TOKEN && SYSTEM_TOKEN !== "EAAG...");
+}
 
 export class WhatsAppService {
   /**
    * Helper to dispatch an API call directly to Meta Cloud API endpoint
    */
   private static async postMetaAPI(payload: any): Promise<boolean> {
-    if (!PHONE_NUMBER_ID || !SYSTEM_TOKEN || SYSTEM_TOKEN === "EAAG...") {
-      console.log("[SHIVINFRA WHATSAPP-MOCK] Dispatched payload via Meta webhook simulation:", JSON.stringify(payload, null, 2));
-      return true;
+    if (!isWhatsAppConfigured()) {
+      if (WHATSAPP_MOCK_MODE) {
+        console.log("[SHIVINFRA WHATSAPP-MOCK] Dispatched payload via Meta webhook simulation:", JSON.stringify(payload, null, 2));
+        return true;
+      }
+      console.error("[SHIVINFRA WHATSAPP-ERROR] WhatsApp credentials missing in production. Set META_WHATSAPP_TOKEN and META_WHATSAPP_PHONE_NUMBER_ID or enable WHATSAPP_MOCK_MODE for development.");
+      return false;
     }
 
     try {
-      const url = `https://graph.facebook.com/v18.0/${PHONE_NUMBER_ID}/messages`;
+      const url = `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${PHONE_NUMBER_ID}/messages`;
       const response = await fetch(url, {
         method: "POST",
         headers: {
@@ -44,14 +55,21 @@ export class WhatsAppService {
    * Sends standard Text Message
    */
   static async sendTextMessage(phone: string, text: string): Promise<boolean> {
-    const payload = {
+    return this.postMetaAPI({
       messaging_product: "whatsapp",
       recipient_type: "individual",
       to: phone,
       type: "text",
       text: { body: text },
-    };
-    return this.postMetaAPI(payload);
+    });
+  }
+
+  static async sendMessage(params: { company_id?: string; phone: string; message: string }): Promise<boolean> {
+    return this.sendTextMessage(params.phone, params.message);
+  }
+
+  static async sendText(phone: string, text: string, companyId?: string): Promise<boolean> {
+    return this.sendTextMessage(phone, text);
   }
 
   /**
@@ -169,16 +187,17 @@ export class WhatsAppService {
       return null;
     }
 
-    const PHONE_NUMBER_ID = process.env.META_WHATSAPP_PHONE_NUMBER_ID;
-    const SYSTEM_TOKEN = process.env.META_WHATSAPP_TOKEN;
-
-    if (!PHONE_NUMBER_ID || !SYSTEM_TOKEN || SYSTEM_TOKEN === "EAAG...") {
-      console.log("[SHIVINFRA WHATSAPP-MOCK] Media download simulated for:", mediaId);
+    if (!isWhatsAppConfigured()) {
+      if (WHATSAPP_MOCK_MODE) {
+        console.log("[SHIVINFRA WHATSAPP-MOCK] Media download simulated for:", mediaId);
+        return null;
+      }
+      console.error("[SHIVINFRA WHATSAPP-ERROR] WhatsApp credentials missing in production. Cannot download media.");
       return null;
     }
 
     try {
-      const url = `https://graph.facebook.com/v18.0/${mediaId}`;
+      const url = `https://graph.facebook.com/${WHATSAPP_API_VERSION}/${mediaId}`;
       const response = await fetch(url, {
         method: "GET",
         headers: {

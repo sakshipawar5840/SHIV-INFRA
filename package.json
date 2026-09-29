@@ -9,7 +9,10 @@
     "start": "node dist/server.cjs",
     "preview": "vite preview",
     "clean": "rm -rf dist server.js server.ts dist/server.cjs",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "seed:demo": "tsx scripts/seed-demo.ts",
+    "clean:demo": "tsx scripts/clean-demo.ts",
+    "clean:demo:hard": "tsx scripts/clean-demo.ts --hard"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",
@@ -35,7 +38,9 @@
     "multer": "^2.2.0",
     "node-cron": "^4.6.0",
     "openai": "^6.45.0",
+    "pdf-parse": "^2.4.5",
     "pdfkit": "^0.19.1",
+    "pg": "^8.23.0",
     "react": "^19.0.1",
     "react-dom": "^19.0.1",
     "recharts": "^3.9.2",
@@ -46,6 +51,7 @@
     "vite": "^6.2.3"
   },
   "devDependencies": {
+    "@playwright/test": "^1.62.1",
     "@types/bcryptjs": "^2.4.6",
     "@types/compression": "^1.8.1",
     "@types/cors": "^2.8.19",
@@ -56,9 +62,13 @@
     "@types/node": "^22.14.0",
     "@types/node-cron": "^3.0.11",
     "@types/pdfkit": "^0.17.6",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.5",
     "@types/uuid": "^10.0.0",
     "autoprefixer": "^10.4.21",
     "esbuild": "^0.25.0",
+    "playwright": "^1.62.1",
+    "supabase": "^2.115.0",
     "tailwindcss": "^4.1.14",
     "tsx": "^4.21.0",
     "typescript": "~5.8.2",

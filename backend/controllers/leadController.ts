@@ -55,6 +55,41 @@ export class LeadController {
 
 
   // ===============================
+  // GET LEAD BY ID
+  // ===============================
+
+  static async getLeadById(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ){
+    try{
+      const companyId =
+        req.user?.company_id!;
+
+      const lead =
+        await leadService.getLeadById(
+          req.params.id,
+          companyId
+        );
+
+      if(!lead){
+        return res.status(404).json({
+          success:false,
+          message:"Lead not found"
+        });
+      }
+
+      return res.json({
+        success:true,
+        data:lead
+      });
+    }catch(error){
+      next(error);
+    }
+  }
+
+  // ===============================
   // CREATE LEAD
   // ===============================
 

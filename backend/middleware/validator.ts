@@ -22,98 +22,85 @@ export const loginSchema = Joi.object({
   password: Joi.string().min(6).required(),
 });
 
+export const registerSchema = Joi.object({
+  company_id: Joi.string().required(),
+  name: Joi.string().required(),
+  email: Joi.string().email().required(),
+  password: Joi.string().min(6).required(),
+  phone: Joi.string().optional().allow(""),
+  role: Joi.string().optional().allow("")
+});
+
 export const projectSchema = Joi.object({
 
   project_name: Joi.string()
-    .min(3)
-    .required(),
-
-  project_type: Joi.string()
+    .min(1)
     .required(),
 
   location: Joi.string()
+    .min(1)
     .required(),
 
   city: Joi.string()
-    .required(),
+    .allow("")
+    .optional(),
 
-  state: Joi.string()
-    .required(),
+  flat_type: Joi.string()
+    .allow("")
+    .optional(),
 
-  pincode: Joi.string()
-    .required(),
+  sqft: Joi.string()
+    .allow("")
+    .optional(),
+
+  price: Joi.number()
+    .min(0)
+    .optional()
+    .allow(null),
+
+  status: Joi.string()
+    .valid(
+      "Planning",
+      "Ongoing",
+      "Completed",
+      "Upcoming"
+    )
+    .default("Ongoing"),
 
   description: Joi.string()
     .allow("")
     .optional(),
 
-
-  flat_types: Joi.string()
+  brochure_pdf_url: Joi.string()
     .allow("")
     .optional(),
-
-
-  total_units: Joi.number()
-    .min(0)
-    .optional()
-    .allow(null),
-
-
-  available_units: Joi.number()
-    .min(0)
-    .optional()
-    .allow(null),
-
-
-  area_sqft: Joi.number()
-    .optional()
-    .allow(null),
-
-
-  price: Joi.number()
-    .optional()
-    .allow(null),
-
-
-  brochure_url: Joi.string()
-    .allow("")
-    .optional(),
-
-
-  thumbnail_url: Joi.string()
-    .allow("")
-    .optional(),
-
-
-  gallery: Joi.array()
-    .items(Joi.string())
-    .optional()
-    .allow(null),
-
 
   amenities: Joi.array()
     .items(Joi.string())
     .optional()
     .allow(null),
 
-
-  contact_person: Joi.string()
+  google_maps_url: Joi.string()
     .allow("")
     .optional(),
 
+  progress: Joi.number()
+    .min(0)
+    .max(100)
+    .optional()
+    .allow(null),
 
-  contact_number: Joi.string()
+  completion_status: Joi.string()
     .allow("")
     .optional(),
 
+  possession_date: Joi.string()
+    .allow("")
+    .optional(),
 
-  status: Joi.string()
-    .valid(
-      "active",
-      "inactive",
-      "completed"
-    )
-    .default("active")
+  name: Joi.string()
+    .min(1)
+    .optional()
 
 });
 

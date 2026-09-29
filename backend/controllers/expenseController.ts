@@ -111,6 +111,45 @@ export class ExpenseController {
 
 
   // ===============================
+  // GET EXPENSE BY ID
+  // ===============================
+
+  static async getExpenseById(
+    req: AuthenticatedRequest,
+    res: Response,
+    next: NextFunction
+  ){
+    const companyId = req.user!.company_id;
+    const { id } = req.params;
+
+    try{
+      const {
+        data,
+        error
+      } = await supabase
+        .from("expenses")
+        .select("*")
+        .eq("id", id)
+        .eq("company_id", companyId)
+        .single();
+
+      if(error || !data){
+        return res.status(404).json({
+          success:false,
+          message:"Expense not found"
+        });
+      }
+
+      return res.json({
+        success:true,
+        data
+      });
+    }catch(err){
+      next(err);
+    }
+  }
+
+  // ===============================
   // CREATE EXPENSE
   // ===============================
 
@@ -124,8 +163,25 @@ export class ExpenseController {
 
     const companyId = req.user!.company_id;
 
-
     try{
+
+
+      const titleValue =
+        req.body.expense_title ||
+        req.body.title ||
+        "";
+
+
+      const categoryValue =
+        req.body.category ||
+        req.body.expense_category ||
+        "";
+
+
+      const paymentValue =
+        req.body.payment_method ||
+        req.body.payment_mode ||
+        "Cash";
 
 
       const expenseData = {
@@ -142,8 +198,12 @@ export class ExpenseController {
           req.body.bill_id || null,
 
 
-        category:
-          req.body.category || req.body.expense_category || "",
+        expense_title: titleValue,
+        title: titleValue,
+
+
+        expense_category: categoryValue,
+        category: categoryValue,
 
 
         description:
@@ -160,8 +220,12 @@ export class ExpenseController {
           .split("T")[0],
 
 
-        payment_method:
-          req.body.payment_method || "Cash",
+        payment_method: paymentValue,
+        payment_mode: paymentValue,
+
+
+        vendor:
+          req.body.vendor || "",
 
 
         remarks:
@@ -170,6 +234,7 @@ export class ExpenseController {
 
         created_by:
           req.user?.id
+
 
       };
 
@@ -237,6 +302,37 @@ export class ExpenseController {
     try{
 
 
+      const allowedFields = [
+        "project_id",
+        "bill_id",
+        "title",
+        "expense_title",
+        "description",
+        "category",
+        "expense_category",
+        "amount",
+        "expense_date",
+        "payment_mode",
+        "payment_method",
+        "vendor",
+        "remarks"
+      ];
+
+      const updateData: any = {};
+
+      for (const field of allowedFields) {
+        if (req.body[field] !== undefined) {
+          updateData[field] = req.body[field];
+        }
+      }
+
+      if (updateData.expense_title !== undefined) updateData.title = updateData.expense_title;
+      if (updateData.title !== undefined) updateData.expense_title = updateData.title;
+      if (updateData.expense_category !== undefined) updateData.category = updateData.expense_category;
+      if (updateData.category !== undefined) updateData.expense_category = updateData.category;
+      if (updateData.payment_method !== undefined) updateData.payment_mode = updateData.payment_method;
+      if (updateData.payment_mode !== undefined) updateData.payment_method = updateData.payment_mode;
+
       const {
         data,
         error
@@ -244,10 +340,10 @@ export class ExpenseController {
         .from("expenses")
         .update({
 
-          ...req.body,
+          ...updateData,
 
-          updated_at:new Date()
-          .toISOString()
+          updated_at: new Date()
+            .toISOString()
 
         })
         .eq("id",id)

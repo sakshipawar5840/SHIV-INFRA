@@ -7,7 +7,8 @@ import { detectIntent } from "./intentDetector";
 import { checkPermission } from "./permissionChecker";
 import { executeTool } from "./toolManager";
 import { generateResponse } from "./responseGenerator";
-import { saveConversation, getLastAIMessage } from "./memory";
+import { saveConversation, getLastAIMessage, getConversationHistory as getDbConversationHistory } from "./memory";
+import { ConfirmationService, ConfirmationPayload } from "../services/confirmationService";
 
 
 // =====================================================
@@ -72,7 +73,21 @@ const CONFIRMATION_REQUIRED = [
 
     "UPLOAD_BILL",
 
-    "ADD_EXPENSE"
+    "ADD_EXPENSE",
+
+    "CREATE_BROADCAST",
+
+    "UPDATE_PROJECT",
+
+    "DELETE_TASK",
+
+    "DELETE_SITE_VISIT",
+
+    "DELETE_INVENTORY",
+
+    "DELETE_VENDOR",
+
+    "DELETE_DOCUMENT"
 
 ];
 
@@ -184,12 +199,66 @@ function getConversationHistory(
         );
 
 
-    return (
+    let history =
         conversationSessions.get(
             key
-        ) || []
-    );
+        ) || [];
 
+
+    if (
+        history.length === 0
+    ) {
+
+        getDbConversationHistory(
+            companyId,
+            20,
+            phone
+        ).then((dbHistory) => {
+
+            if (
+                Array.isArray(dbHistory) &&
+                dbHistory.length > 0
+            ) {
+
+                const normalized =
+                    dbHistory.map((item) => ({
+
+                        message:
+                            item.message,
+
+                        role:
+                            item.sender === "Agent"
+                                ? "AI"
+                                : item.sender === "System"
+                                    ? "system"
+                                    : "user",
+
+                        timestamp:
+                            item.created_at
+                                ? new Date(
+                                    item.created_at
+                                ).getTime()
+                                : Date.now()
+
+                    }));
+
+
+                conversationSessions.set(
+                    key,
+                    normalized
+                );
+
+                history =
+                    normalized;
+
+            }
+
+        }).catch(() => {});
+
+    }
+
+
+    return history;
 
 }
 
@@ -395,7 +464,10 @@ export async function runAgent(
             );
 
         const pendingConfirmation =
-            pendingConfirmations.get(confirmationKey);
+            await ConfirmationService.getPendingConfirmation(
+                request.companyId,
+                request.phone || request.userId
+            );
 
 
 
@@ -404,10 +476,8 @@ export async function runAgent(
 
 
         if(
-            pendingConfirmation &&
-            Date.now() - pendingConfirmation.timestamp < CONFIRMATION_TTL_MS
+            pendingConfirmation
         ){
-
 
 
             const userText =
@@ -439,14 +509,15 @@ export async function runAgent(
 
 
 
+                // Mark as confirmed in persistent storage
+                const confirmedConfirmation =
+                    await ConfirmationService.confirmPending(
+                        request.companyId,
+                        request.phone || request.userId
+                    );
+
                 pendingIntent =
-                pendingConfirmation.intent;
-
-
-
-                pendingConfirmations.delete(
-                    confirmationKey
-                );
+                    pendingConfirmation?.intent_data?.intent;
 
 
 
@@ -491,6 +562,10 @@ export async function runAgent(
                         companyId: request.companyId,
 
                         role: request.role,
+
+                        phone: request.phone,
+
+                        message: request.message,
 
                         conversationHistory:
                             getConversationHistory(
@@ -570,9 +645,10 @@ export async function runAgent(
             else if(isCancel){
 
 
-
-                pendingConfirmations.delete(
-                    confirmationKey
+                // Cancel in persistent storage
+                await ConfirmationService.cancelPending(
+                    request.companyId,
+                    request.phone || request.userId
                 );
 
 
@@ -637,23 +713,17 @@ export async function runAgent(
 
 
             }
+            else if(pendingConfirmation){
 
+                // Clear expired/invalid confirmation
+                await ConfirmationService.cancelPending(
+                    request.companyId,
+                    request.phone || request.userId
+                );
 
+            }
 
-        }
-        else if(pendingConfirmation){
-
-
-
-            pendingConfirmations.delete(
-                confirmationKey
-            );
-
-
-
-        }
-
-
+        } // end of pending confirmation check
 
         // -------------------------------------------------
         // 3. RESOLVE FOLLOW-UP CONTEXT
@@ -797,14 +867,19 @@ export async function runAgent(
 
 
 
-            pendingConfirmations.set(
-                confirmationKey,
-                {
-                    intent,
-                    timestamp: Date.now(),
-                    phone: request.phone,
-                    companyId: request.companyId
-                }
+            // Create persistent confirmation record
+            const confirmationPayload: ConfirmationPayload = {
+                intent,
+                userId: request.userId,
+                role: request.role,
+                channel: request.channel,
+                originalMessage: request.message,
+            };
+
+            await ConfirmationService.createConfirmation(
+                request.companyId,
+                request.phone || request.userId,
+                confirmationPayload
             );
 
 
@@ -881,6 +956,10 @@ export async function runAgent(
                 companyId:request.companyId,
 
                 role: request.role,
+
+                phone: request.phone,
+
+                message: request.message,
 
                 conversationHistory:
                     getConversationHistory(
@@ -1067,6 +1146,29 @@ function buildConfirmationMessage(
         `Amount: ${params.amount ? "₹" + Number(params.amount).toLocaleString("en-IN") : "Not specified"}\n` +
         `Category: ${params.expense_category || params.category || "General"}\n\n` +
         `Save this expense?\n\n`;
+
+
+
+    }
+    else if(intent.name === "UPDATE_PROJECT"){
+
+
+
+        const params = intent.parameters || {};
+
+
+
+        // Build preview of fields to be updated
+        const updateFields = Object.entries(params)
+            .filter(([key]) => key !== "project_name" && key !== "id" && key !== "project_id")
+            .map(([key, value]) => `${key}: ${value}`)
+            .join("\n");
+
+
+
+        details =
+        `Project: ${params.project_name || name || "Unknown"}\n` +
+        `Fields to update:\n${updateFields || "None specified"}\n\n`;
 
 
 

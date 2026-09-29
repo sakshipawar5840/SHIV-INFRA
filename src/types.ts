@@ -1,131 +1,251 @@
 export interface Project {
   id: string;
-  name: string;
+  company_id: string;
+  project_name: string;
+  project_type?: string;
   location: string;
-  flat_type: string;
-  sqft: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  description?: string;
+  flat_types?: string[] | null;
+  total_units?: number | null;
+  available_units?: number | null;
+  area_sqft?: number | null;
   price: number;
+  brochure_url?: string | null;
+  thumbnail_url?: string | null;
+  gallery?: string[] | null;
+  amenities?: string[] | null;
+  contact_person?: string | null;
+  contact_number?: string | null;
   status: 'Planning' | 'Ongoing' | 'Completed' | 'Upcoming';
-  description: string;
-  progress: number;
+  progress?: number;
   completion_status?: string;
   possession_date?: string;
-  image_url?: string;
+  created_at?: string;
+  updated_at?: string;
+  images?: any[];
+  is_deleted?: boolean;
+  deleted_at?: string;
 }
 
 export interface Lead {
   id: string;
-  name: string;
-  phone: string;
-  email?: string;
+  company_id: string;
+  customer_id?: string | null;
+  project_id?: string | null;
+  lead_source: string;
   requirement: string;
-  location: string;
-  budget: number; // in INR
-  status: 'New' | 'Contacted' | 'Interested' | 'Site Visit' | 'Negotiation' | 'Booked' | 'Rejected';
-  source: string;
-  assigned_to?: string;
-  notes?: string;
-  timelineLogs?: { timestamp: string; text: string; author: string }[];
+  budget: number;
+  preferred_location: string;
+  status: 'New' | 'Follow Up' | 'Hot' | 'Closed' | 'Lost';
+  assigned_to?: string | null;
+  remarks?: string;
   created_at?: string;
+  updated_at?: string;
   is_deleted?: boolean;
   ai_score?: number;
   ai_summary?: string;
+  customers?: {
+    id: string;
+    full_name: string;
+    phone: string;
+    email: string;
+  };
+  projects?: {
+    id: string;
+    project_name: string;
+    location: string;
+  };
+  name?: string;
+  phone?: string;
+  email?: string;
+  location?: string;
+  source?: string;
+  notes?: string;
+  timelineLogs?: { timestamp: string; text: string; author: string }[];
 }
 
 export interface Customer {
   id: string;
-  name: string;
+  company_id: string;
+  full_name: string;
   phone: string;
-  email: string;
-  requirement: string;
-  budget: number;
-  location_preference: string;
-  status: 'Active' | 'VIP' | 'Inactive' | 'Closed';
+  email?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
+  address?: string;
+  budget?: number | null;
+  interested_location?: string;
+  interested_property_type?: string;
+  status: 'active' | 'inactive';
+  source?: string;
   notes?: string;
+  last_followup?: string;
+  deleted_at?: string;
+  created_at?: string;
+  updated_at?: string;
+  is_deleted?: boolean;
 }
 
 export interface Bill {
   id: string;
-  project_id: string;
-  vendor: string;
-  amount: number;
-  material: string;
-  bill_date: string;
-  file_name?: string;
-  ocr_status: 'Pending' | 'Success' | 'Failed';
-  invoice_number?: string;
-  quantity?: number;
+  company_id: string;
+  project_id?: string | null;
+  uploaded_by?: string | null;
+  vendor_name: string;
+  material_name: string;
+  quantity?: number | null;
   unit?: string;
+  amount: number;
+  gst_amount?: number;
+  bill_number?: string;
+  bill_date?: string;
+  payment_status: string;
+  bill_file_url?: string;
+  ocr_text?: any;
+  remarks?: string;
+  approved_by?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  vendor?: string;
+  material?: string;
+  invoice_number?: string;
   gst?: number;
+  file_name?: string;
+  ocr_status?: 'Pending' | 'Success' | 'Failed';
 }
 
 export interface Expense {
   id: string;
-  project_id: string;
-  category: string;
+  company_id: string;
+  project_id?: string | null;
+  bill_id?: string | null;
+  expense_title?: string;
+  title?: string;
+  description?: string;
+  category?: string;
+  expense_category?: string;
   amount: number;
-  date: string;
-  payment_method: string;
+  expense_date: string;
+  payment_method?: string;
+  payment_mode?: string;
+  vendor?: string;
+  remarks?: string;
+  created_by?: string;
+  created_at?: string;
+  updated_at?: string;
+  category_display?: string;
+  date?: string;
+  payment_method_display?: string;
   notes?: string;
 }
 
 export interface SiteVisit {
   id: string;
-  lead_id: string;
-  customer_name: string;
-  project_name: string;
-  visit_date: string; // YYYY-MM-DD
-  status: 'Scheduled' | 'Completed' | 'Cancelled';
-  engineer?: string;
+  company_id: string;
+  lead_id?: string | null;
+  customer_id?: string | null;
+  project_id: string;
+  visit_date: string;
+  status: 'Scheduled' | 'Completed' | 'Cancelled' | 'Postponed';
+  notes?: string;
+  google_event_id?: string;
+  created_at?: string;
+  updated_at?: string;
+  is_deleted?: boolean;
+  leads?: {
+    id: string;
+    requirement: string;
+    preferred_location: string;
+    customer_id?: string | null;
+    project_id?: string | null;
+    customers?: {
+      full_name: string;
+      phone: string;
+    };
+    projects?: {
+      project_name: string;
+      location: string;
+    };
+  } | null;
+  customers?: {
+    full_name: string;
+    phone: string;
+  } | null;
+  projects?: {
+    project_name: string;
+    location: string;
+  } | null;
 }
 
 export interface InventoryItem {
   id: string;
+  company_id: string;
+  project_id?: string | null;
   item_name: string;
   category: string;
   quantity: number;
   unit: string;
-  minimum_level: number;
-  unit_price: number;
-  warehouse_location: string;
+  minimum_stock?: number;
+  unit_price?: number;
+  supplier_id?: string | null;
+  created_at?: string;
+  updated_at?: string;
+  is_deleted?: boolean;
 }
 
 export interface Vendor {
   id: string;
-  name: string;
-  phone: string;
-  email: string;
-  material_type: string;
-  pending_balance: number;
-  rating: number;
+  company_id: string;
+  vendor_name: string;
+  contact_person?: string;
+  phone?: string;
+  email?: string;
+  gstin?: string;
+  rating?: number;
+  outstanding_balance?: number;
+  created_at?: string;
+  updated_at?: string;
+  is_deleted?: boolean;
 }
 
 export interface TaskItem {
   id: string;
+  company_id: string;
+  project_id?: string | null;
   title: string;
+  description?: string;
   due_date: string;
   priority: 'High' | 'Medium' | 'Low';
-  status: 'Completed' | 'Pending';
-  assigned_to: string;
+  status: 'Pending' | 'In Progress' | 'Completed' | 'Cancelled';
+  assigned_to?: string | null;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface DocumentItem {
   id: string;
-  name: string;
-  type: string; // PDF, PNG, XLSX, etc.
-  category: string;
-  size: string;
-  uploaded_at: string;
+  company_id: string;
+  project_id?: string;
+  document_name: string;
+  document_type: string;
+  file_url: string;
+  file_size: number;
+  uploaded_by?: string;
+  created_at?: string;
 }
 
 export interface NotificationItem {
   id: string;
   company_id: string;
-  user_id: string;
-  customer_id: string;
+  user_id: string | null;
   title: string;
   message: string;
-  type: string; // 'enquiry' | 'visit' | 'payment' | 'bill' | 'support' etc.
+  type: string;
+  is_read: boolean;
   status: 'read' | 'unread';
   created_at: string;
 }
@@ -142,23 +262,35 @@ export interface InquiryItem {
   status: 'New' | 'Interested' | 'Replied' | 'Follow up' | 'Not Interested';
   replied: boolean;
   notes?: string;
-  interest_level: 'High' | 'Medium' | 'Low' | 'VIP';
+  interest_level: 'High' | 'Medium' | 'Low' | 'VIP' | 'Not Interested';
+  address?: string;
+  email?: string;
+  source?: string;
+  follow_up?: string;
 }
 
 export interface ActivityLog {
   id: string;
-  timestamp: string;
-  type: 'Access' | 'Create' | 'Update' | 'Delete';
+  company_id: string;
+  user_id?: string | null;
+  action: string;
+  module: string;
   description: string;
-  user: string;
+  ip_address?: string | null;
+  created_at: string;
 }
 
 export interface SystemUser {
   id: string;
+  company_id: string;
   name: string;
   email: string;
-  role: 'Super Admin' | 'Admin' | 'Engineer' | 'Sales Executive' | 'Customer';
-  status: 'Active' | 'Inactive';
+  phone?: string;
+  role: 'Super Admin' | 'Admin' | 'Engineer' | 'Sales Manager' | 'Customer';
+  status: 'Active' | 'Inactive' | 'Disabled';
+  created_at?: string;
+  updated_at?: string;
+  is_deleted?: boolean;
 }
 
 export interface SystemSettings {

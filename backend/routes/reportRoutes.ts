@@ -1,8 +1,11 @@
 import { Router } from "express";
 import { ReportController } from "../controllers/reportController.ts";
-import { authenticateJWT } from "../middleware/auth.ts";
+import { authenticateJWT, authorizeRoles } from "../middleware/auth.ts";
 
 export const reportRouter = Router();
 
-// Secure endpoint allowing executives to compile spreadsheets
-reportRouter.get("/generate", authenticateJWT, ReportController.generateReport);
+reportRouter.get("/financial-summary", authenticateJWT, ReportController.getFinancialSummary);
+reportRouter.get("/bills", authenticateJWT, ReportController.getBillsReport);
+reportRouter.get("/expenses", authenticateJWT, ReportController.getExpensesReport);
+reportRouter.get("/project/:project_id", authenticateJWT, ReportController.getProjectFinancial);
+reportRouter.get("/generate", authenticateJWT, authorizeRoles("Admin", "Super Admin", "Engineer", "Sales Manager"), ReportController.generateReport);

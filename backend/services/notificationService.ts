@@ -1,91 +1,103 @@
+import { supabaseAdmin as supabase } from "../config/supabase.ts";
 import WhatsAppService from "./whatsappService.ts";
+import { userService } from "./userService.ts";
 import { v4 as uuidv4 } from "uuid";
+
+async function getAdminWhatsAppNumbers(companyId: string): Promise<string[]> {
+  try {
+    const result = await userService.list(companyId);
+    if (!result.success || !result.data) return [];
+    return result.data
+      .filter((u: any) => (u.role === 'Admin' || u.role === 'Super Admin') && u.phone)
+      .map((u: any) => u.phone);
+  } catch {
+    return [];
+  }
+}
 
 export interface NotificationRecord {
   id: string;
   company_id: string;
-  user_id: string;
-  customer_id: string;
+  user_id: string | null;
   title: string;
   message: string;
   type: string;
-  status: "read" | "unread";
+  is_read: boolean;
   created_at: string;
 }
 
-// In-memory simulation of the notifications database table
-export const notificationsTable: NotificationRecord[] = [
-  {
-    id: "not_1",
-    company_id: "74834208-4783-4783-4783-420847834208",
-    user_id: "88888888-8888-8888-8888-888888888888",
-    customer_id: "c1",
-    title: "🔔 New Site Visit Booked",
-    message: "Customer Rahul Patil booked site visit for Sky Heights on 15 July 2026, 11:00 AM. Location: Baner.",
-    type: "visit",
-    status: "unread",
-    created_at: new Date(Date.now() - 30 * 60 * 1000).toISOString(),
-  },
-  {
-    id: "not_2",
-    company_id: "74834208-4783-4783-4783-420847834208",
-    user_id: "88888888-8888-8888-8888-888888888888",
-    customer_id: "c2",
-    title: "📞 Call Me Request Received",
-    message: "Customer Ramesh Patil clicked 'Call Me' request. Wants urgent callback about Wakad flat specifications.",
-    type: "call",
-    status: "unread",
-    created_at: new Date(Date.now() - 2 * 3600 * 1000).toISOString(),
-  }
-];
-
 export class NotificationService {
-  /**
-   * Retrieves all notifications
-   */
-  static async getAllNotifications(): Promise<NotificationRecord[]> {
-    return [...notificationsTable].sort(
-      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    );
-  }
+  static async getAllNotifications(companyId: string, userId?: string): Promise<NotificationRecord[]> {
+    let query = supabase
+      .from("notifications")
+      .select("*")
+      .eq("company_id", companyId)
+      .order("created_at", { ascending: false });
 
-  /**
-   * Marks a notification as read
-   */
-  static async markAsRead(id: string): Promise<boolean> {
-    const found = notificationsTable.find((n) => n.id === id);
-    if (found) {
-      found.status = "read";
-      return true;
+    if (userId) {
+      query = query.or(`user_id.eq.${userId},user_id.is.null`);
     }
-    return false;
+
+    const { data, error } = await query;
+
+    if (error) throw error;
+    return (data || []).map((row: any) => ({
+      ...row,
+      is_read: row.is_read || false,
+    }));
   }
 
-  /**
-   * Marks all notifications as read
-   */
-  static async markAllAsRead(): Promise<boolean> {
-    notificationsTable.forEach((n) => {
-      n.status = "read";
-    });
+  static async markAsRead(id: string, companyId: string, userId?: string): Promise<boolean> {
+    let query = supabase
+      .from("notifications")
+      .update({ is_read: true })
+      .eq("id", id)
+      .eq("company_id", companyId);
+
+    if (userId) {
+      query = query.or(`user_id.eq.${userId},user_id.is.null`);
+    }
+
+    const { data, error } = await query.select("id").maybeSingle();
+
+    if (error) throw error;
+    return !!data;
+  }
+
+  static async markAllAsRead(companyId: string, userId?: string): Promise<boolean> {
+    let query = supabase
+      .from("notifications")
+      .update({ is_read: true })
+      .eq("company_id", companyId)
+      .eq("is_read", false);
+
+    if (userId) {
+      query = query.or(`user_id.eq.${userId},user_id.is.null`);
+    }
+
+    const { error } = await query;
+
+    if (error) throw error;
     return true;
   }
 
-  /**
-   * Deletes a notification
-   */
-  static async deleteNotification(id: string): Promise<boolean> {
-    const idx = notificationsTable.findIndex((n) => n.id === id);
-    if (idx !== -1) {
-      notificationsTable.splice(idx, 1);
-      return true;
+  static async deleteNotification(id: string, companyId: string, userId?: string): Promise<boolean> {
+    let query = supabase
+      .from("notifications")
+      .delete()
+      .eq("id", id)
+      .eq("company_id", companyId);
+
+    if (userId) {
+      query = query.or(`user_id.eq.${userId},user_id.is.null`);
     }
-    return false;
+
+    const { error } = await query;
+
+    if (error) throw error;
+    return true;
   }
 
-  /**
-   * Dispatches and stores a customer notification
-   */
   static async triggerCustomerActionNotification(
     type: string,
     customerData: {
@@ -102,22 +114,24 @@ export class NotificationService {
       category?: string;
       amount?: string;
       complaintText?: string;
-    }
+    },
+    companyId: string,
+    userId?: string
   ): Promise<{ success: boolean; notification: NotificationRecord; waDispatched: boolean }> {
     const {
       name,
       phone,
-      project = "Green Valley",
-      location = "Baner, Pune",
-      budget = "₹ 65.0 Lakhs",
-      requirement = "2 BHK Apartment",
-      date = "15 July 2026",
-      time = "11:00 AM",
-      filename = "blueprint.pdf",
-      size = "4.2 MB",
-      category = "Blueprints",
-      amount = "₹ 10,00,000",
-      complaintText = "Water connection leakage on level 4.",
+      project = "Project",
+      location = "Location",
+      budget = "Budget",
+      requirement = "Requirement",
+      date = "",
+      time = "",
+      filename = "",
+      size = "",
+      category = "",
+      amount = "",
+      complaintText = "",
     } = customerData;
 
     let title = "🔔 System Event Alert";
@@ -163,8 +177,8 @@ export class NotificationService {
 
       case "whatsapp_chat":
         title = "💬 WhatsApp Inbound Message";
-        message = `Customer ${name} started a new chat thread: "Hello, I am interested in Green Valley layouts."`;
-        waMessage = `💬 *New WhatsApp Chat Thread*\n\nFrom: ${name} (${phone})\nLast Message: "Hello, I am interested in Green Valley layouts."\n\n🔗 Reply inside Center: https://shivinfra.erp/whatsapp`;
+        message = `Customer ${name} started a new chat thread.`;
+        waMessage = `💬 *New WhatsApp Chat Thread*\n\nFrom: ${name} (${phone})\n\n🔗 Reply inside Center: https://shivinfra.erp/whatsapp`;
         break;
 
       case "lead_created":
@@ -207,25 +221,42 @@ export class NotificationService {
         waMessage = `🔔 *SHIV INFRA Alert*\n\nCustomer: ${name}\nAction: ${type}`;
     }
 
-    // Save to table simulation
     const newRecord: NotificationRecord = {
-      id: "not_" + Date.now(),
-      company_id: "74834208-4783-4783-4783-420847834208",
-      user_id: "88888888-8888-8888-8888-888888888888",
-      customer_id: "c_" + Date.now(),
+      id: uuidv4(),
+      company_id: companyId,
+      user_id: userId,
       title,
       message,
       type,
-      status: "unread",
+      is_read: false,
       created_at: new Date().toISOString(),
     };
 
-    notificationsTable.unshift(newRecord);
+    const { error } = await supabase
+      .from("notifications")
+      .insert({
+        id: newRecord.id,
+        company_id: newRecord.company_id,
+        user_id: newRecord.user_id,
+        title: newRecord.title,
+        message: newRecord.message,
+        is_read: false,
+      });
 
-    // Call WhatsApp API Helper to notify Admin
-    // Admin WhatsApp is +91 98765 43210
-    const ADMIN_WA = "+919876543210";
-    const waDispatched = await WhatsAppService.sendTextMessage(ADMIN_WA, waMessage);
+    if (error) throw error;
+
+    // Resolve admin WhatsApp numbers from database for this company
+    const adminPhones = await getAdminWhatsAppNumbers(companyId);
+    let waDispatched = false;
+
+    if (adminPhones.length > 0) {
+      for (const adminPhone of adminPhones) {
+        const sent = await WhatsAppService.sendTextMessage(adminPhone, waMessage);
+        waDispatched = waDispatched || sent;
+      }
+    } else {
+      console.error("[SHIVINFRA NOTIFICATION] Admin WhatsApp skipped — no admin users with phone numbers configured for this company.");
+    }
 
     return {
       success: true,

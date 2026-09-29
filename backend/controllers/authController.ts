@@ -6,9 +6,13 @@ import { supabaseAdmin as supabase } from "../config/supabase.ts";
 
 
 
-const JWT_SECRET =
-process.env.JWT_SECRET ||
-"shivinfra_jwt_secret_2026";
+const JWT_SECRET = process.env.JWT_SECRET;
+
+if (!JWT_SECRET) {
+  throw new Error(
+    "JWT_SECRET environment variable is required. Application startup aborted."
+  );
+}
 
 
 
@@ -99,7 +103,7 @@ export class AuthController {
 
 
       const allowedRoles = ["Super Admin","Admin","Engineer","Sales Manager","Customer"];
-      const safeRole = allowedRoles.includes(role) ? role.toLowerCase() : "customer";
+      const safeRole = allowedRoles.includes(role) ? role : "Customer";
 
       const hashedPassword =
       await bcrypt.hash(
@@ -368,8 +372,7 @@ export class AuthController {
 
         {
 
-          expiresIn:
-          "7d"
+          expiresIn: "8h"
 
         }
 
@@ -536,8 +539,7 @@ export class AuthController {
 
         {
 
-          expiresIn:
-          "7d"
+          expiresIn: "8h"
 
         }
 
@@ -583,6 +585,24 @@ export class AuthController {
 
 
 
+
+  // =================================
+  // LOGOUT
+  // =================================
+
+  static async logout(
+    req:Request,
+    res:Response
+  ){
+    // Stateless JWT: there is no server-side session to destroy.
+    // The client is expected to discard the stored token. This
+    // endpoint exists so the frontend has a real, non-404 hook to
+    // call on logout and to keep the activity log consistent.
+    return res.json({
+      success:true,
+      message: "Logout successful"
+    });
+  }
 
   // =================================
   // FORGOT PASSWORD

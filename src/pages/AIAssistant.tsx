@@ -1,13 +1,11 @@
-// ============================================
-// SHIVINFRA AI ASSISTANT V2
+// SHIVINFRA AI ASSISTANT
 // PRODUCTION FRONTEND AI AGENT
-// PART 1 / 4
-// ============================================
 
 
 import React, {
     useState,
-    useRef
+    useRef,
+    useEffect
 } from "react";
 
 
@@ -60,6 +58,7 @@ interface ChatMessage {
 
 
 
+
 interface AIResponse {
 
 
@@ -101,16 +100,16 @@ interface AIResponse {
 
 
 
+
 // ============================================
 // API CONFIG
 // ============================================
 
 
 const API_URL =
-
-import.meta.env.VITE_API_URL ||
-
-"http://localhost:3000/api/v1";
+    import.meta.env.PROD
+      ? "/api/v1"
+      : "http://localhost:3000/api/v1";
 
 
 
@@ -250,6 +249,7 @@ const callAI = async(
 
 
 
+
         );
 
 
@@ -274,6 +274,7 @@ const callAI = async(
 
 
     }
+
 
     catch(error:any){
 
@@ -313,6 +314,7 @@ const callAI = async(
 
 
     }
+
 
 
 
@@ -382,6 +384,7 @@ useState<ChatMessage[]>([
 
 
 
+
 ]);
 
 
@@ -412,15 +415,76 @@ useState(false);
 
 const [error,setError] =
 
+
 useState("");
 
 
+const [aiStatus,setAiStatus] = useState<{status:string,provider:string,message:string}>({
+    status:"checking",
+    provider:"unknown",
+    message:"Checking AI status"
+});
 
 
+useEffect(()=>{
+    const token = localStorage.getItem("token");
+    const fetchStatus = async () => {
+        try {
+            const res = await fetch(`${API_URL}/ai/gemini-status`, {
+                headers: token ? { Authorization: `Bearer ${token}` } : {}
+            });
+            const data = await res.json();
+            if (data && data.status) {
+                setAiStatus({
+                    status: data.status,
+                    provider: data.provider || "unknown",
+                    message: data.message || ""
+                });
+            }
+        } catch {
+            setAiStatus({ status: "fallback", provider: "rule-based", message: "Using rule-based fallback" });
+        }
+    };
+    fetchStatus();
+}, []);
+const [customerCount, setCustomerCount] = useState<number | null>(
+    null
+);
 
+useEffect(() => {
+    const token = getAuthToken();
+    const fetchCustomerCount = async () => {
+        try {
+            const res = await fetch(`${API_URL}/customers`, {
+                headers: token ? { Authorization: `Bearer ${token}` } : {}
+            });
+            const data = await res.json();
+            if (data && typeof data.count === "number") {
+                setCustomerCount(
+                    data.count
+                );
+            }
+        } catch {
+            setCustomerCount(
+                null
+            );
+        }
+    };
+    fetchCustomerCount();
+}, []);
 
+const messagesEndRef = useRef<HTMLDivElement>(null);
 
+const scrollToBottom = () => {
+    messagesEndRef.current?.scrollTo({
+        top: messagesEndRef.current.scrollHeight,
+        behavior: "smooth"
+    });
+};
 
+useEffect(() => {
+    scrollToBottom();
+}, [messages]);
 
 // ============================================
 // TIME FORMAT
@@ -443,6 +507,7 @@ hour:"2-digit",
 minute:"2-digit"
 
 }
+
 
 );
 
@@ -649,6 +714,7 @@ aiMessage
 
 }
 
+
 else{
 
 
@@ -669,6 +735,7 @@ result.message ||
 
 
 
+
 setLoading(false);
 
 
@@ -676,63 +743,153 @@ setLoading(false);
 
 
 };
-// ============================================
-// PART 2 / 4
-// HEADER + COMMAND PANEL
-// ============================================
 
-
-
-
-// ============================================
-// QUICK COMMANDS
-// ============================================
-
+const handleClearConversation = () => {
+    setMessages([
+        {
+            id:"welcome",
+            sender:"ai",
+            text:
+            "Hello 👋 I am SHIVINFRA AI Agent. I can manage Projects, Customers, Leads, Bills, Expenses, Reports and WhatsApp automation.",
+            timestamp:"Now",
+            success:true
+        }
+    ]);
+    setError("");
+    setInputText("");
+};
 
 const quickCommands = [
 
-
     {
-        title:"Search Projects",
-        message:
-        "Show available projects in Pune"
+        title: "Search Projects",
+        message: "Show available projects in Pune"
     },
 
-
     {
-        title:"Add Project",
-        message:
-        "Add new project with details"
+        title: "Add Project",
+        message: "Add new project with details"
     },
 
-
     {
-        title:"Search Customers",
-        message:
-        "Show customers list"
+        title: "Update Project",
+        message: "Update project details"
     },
 
-
     {
-        title:"Today's Leads",
-        message:
-        "Show today's leads"
+        title: "Delete Project",
+        message: "Delete a project"
     },
 
-
     {
-        title:"Generate Report",
-        message:
-        "Generate monthly business report"
+        title: "Search Customers",
+        message: "Show customers list"
     },
 
+    {
+        title: "Add Customer",
+        message: "Add new customer"
+    },
 
     {
-        title:"Check Expenses",
-        message:
-        "Show current expenses"
+        title: "Today's Leads",
+        message: "Show today's leads"
+    },
+
+    {
+        title: "Add Lead",
+        message: "Add new lead"
+    },
+
+    {
+        title: "Search Leads",
+        message: "Search leads by criteria"
+    },
+
+    {
+        title: "Add Expense",
+        message: "Add new expense"
+    },
+
+    {
+        title: "Check Expenses",
+        message: "Show current expenses"
+    },
+
+    {
+        title: "Search Expenses",
+        message: "Search expenses by criteria"
+    },
+
+    {
+        title: "Add Task",
+        message: "Create new task"
+    },
+
+    {
+        title: "Search Tasks",
+        message: "Show tasks list"
+    },
+
+    {
+        title: "Add Site Visit",
+        message: "Book new site visit"
+    },
+
+    {
+        title: "Search Site Visits",
+        message: "Show site visits list"
+    },
+
+    {
+        title: "Add Vendor",
+        message: "Add new vendor"
+    },
+
+    {
+        title: "Search Vendors",
+        message: "Show vendors list"
+    },
+
+    {
+        title: "Add Inventory",
+        message: "Add new inventory item"
+    },
+
+    {
+        title: "Search Inventory",
+        message: "Show inventory items"
+    },
+
+    {
+        title: "Material Search",
+        message: "Search material suppliers near Pune"
+    },
+
+    {
+        title: "Search Bills",
+        message: "Show bills list"
+    },
+
+    {
+        title: "Search Documents",
+        message: "Show documents list"
+    },
+
+    {
+        title: "Create Broadcast",
+        message: "Create WhatsApp broadcast campaign"
+    },
+
+    {
+        title: "Generate Report",
+        message: "Generate monthly business report"
+    },
+
+    {
+        title: "Check Expenses",
+        message: "Show current expenses"
     }
-
 
 ];
 
@@ -828,7 +985,7 @@ flex-col
 
 space-y-5
 
-text-slate-100
+text-text-primary
 
 font-sans
 
@@ -846,16 +1003,17 @@ AI HEADER
 
 
 
+
 <div
 
 
 className="
 
-bg-slate-900
+bg-surface
 
 border
 
-border-slate-800
+border-border
 
 rounded-2xl
 
@@ -894,11 +1052,11 @@ w-12
 
 rounded-xl
 
-bg-sky-500/10
+bg-ai/10
 
 border
 
-border-sky-500/30
+border-ai/30
 
 flex
 
@@ -916,7 +1074,8 @@ justify-center
 
 size={26}
 
-className="text-sky-400 animate-pulse"
+
+className="text-ai animate-pulse"
 
 />
 
@@ -960,7 +1119,7 @@ className="
 
 text-xs
 
-text-slate-400
+text-text-secondary
 
 "
 
@@ -1021,13 +1180,13 @@ py-1
 
 rounded-full
 
-bg-emerald-500/10
+bg-success/5
 
 border
 
 border-emerald-500/20
 
-text-emerald-400
+text-success
 
 text-xs
 
@@ -1040,12 +1199,14 @@ text-xs
 
 size={8}
 
+
 className="fill-emerald-400"
 
 />
 
 
-AI Online
+{aiStatus.status === "available" ? "AI Online" : aiStatus.status === "degraded" ? "AI Degraded" : aiStatus.status === "fallback" ? "AI Fallback" : "AI Checking"}
+
 
 
 </span>
@@ -1067,13 +1228,13 @@ py-1
 
 rounded-full
 
-bg-purple-500/10
+bg-ai/10
 
 border
 
-border-purple-500/20
+border-ai/20
 
-text-purple-400
+text-ai
 
 text-xs
 
@@ -1085,6 +1246,7 @@ text-xs
 {role}
 
 
+
 </span>
 
 
@@ -1103,13 +1265,13 @@ py-1
 
 rounded-full
 
-bg-blue-500/10
+bg-primary/5
 
 border
 
-border-blue-500/20
+border-primary/20
 
-text-blue-400
+text-primary
 
 text-xs
 
@@ -1117,12 +1279,62 @@ text-xs
 
 >
 
-Gemini Engine
+{aiStatus.provider === "gemini" ? "Gemini Engine" : aiStatus.provider === "openai" ? "OpenAI Engine" : aiStatus.provider === "rule-based" ? "Rule Engine" : "AI Engine"}
+
 
 </span>
 
 
+{customerCount !== null && (
+<span
+className="
+flex
+items-center
+gap-1
+px-3
+py-1
+rounded-full
+bg-primary/5
+border
+border-primary/20
+text-primary
+text-xs
+"
+>
+<span
+className="
+font-bold
+text-primary
+"
+>
+{customerCount}
+</span>
+Customers
+</span>
+)
+}
 
+
+<button
+onClick={handleClearConversation}
+className="
+ml-3
+px-3
+py-1
+rounded-lg
+bg-surface
+border
+border-border
+text-xs
+text-text-secondary
+hover:bg-red-500/10
+hover:border-red-500/30
+hover:text-red-400
+transition
+"
+>
+Clear
+</button>
 
 </div>
 
@@ -1143,6 +1355,7 @@ Gemini Engine
 {/* =====================================
 MAIN GRID
 ===================================== */}
+
 
 
 
@@ -1179,16 +1392,17 @@ COMMAND PANEL
 
 
 
+
 <div
 
 
 className="
 
-bg-slate-900
+bg-surface
 
 border
 
-border-slate-800
+border-border
 
 rounded-2xl
 
@@ -1215,7 +1429,7 @@ uppercase
 
 tracking-widest
 
-text-slate-400
+text-text-secondary
 
 mb-4
 
@@ -1257,6 +1471,7 @@ quickCommands.map(
 key={index}
 
 
+
 onClick={()=>
 
 
@@ -1270,6 +1485,7 @@ command.message
 
 
 
+
 className="
 
 w-full
@@ -1280,19 +1496,19 @@ p-3
 
 rounded-xl
 
-bg-slate-950
+bg-surface
 
 border
 
-border-slate-800
+border-border
 
-hover:border-sky-500
+hover:border-ai
 
 transition
 
 text-xs
 
-text-slate-300
+text-text-secondary
 
 "
 
@@ -1320,13 +1536,15 @@ gap-2
 
 size={14}
 
-className="text-sky-400"
+
+className="text-ai"
 
 />
 
 
 
 {command.title}
+
 
 
 
@@ -1349,6 +1567,7 @@ className="text-sky-400"
 
 
 
+
 </div>
 
 
@@ -1361,6 +1580,7 @@ className="text-sky-400"
 {/* =====================================
 OCR UPLOAD
 ===================================== */}
+
 
 
 
@@ -1383,13 +1603,13 @@ p-3
 
 rounded-xl
 
-bg-orange-500/10
+bg-black/5
 
 border
 
-border-orange-500/20
+border-black/10
 
-text-orange-400
+text-black
 
 text-xs
 
@@ -1402,6 +1622,7 @@ text-xs
 <Paperclip
 
 size={15}
+
 
 />
 
@@ -1426,6 +1647,7 @@ accept="image/*,.pdf"
 onChange={handleFileUpload}
 
 
+
 />
 
 
@@ -1443,10 +1665,6 @@ onChange={handleFileUpload}
 
 
 
-// ============================================
-// PART 3 / 4
-// CHAT WINDOW
-// ============================================
 
 
 
@@ -1454,6 +1672,7 @@ onChange={handleFileUpload}
 {/* =====================================
 ERROR MESSAGE
 ===================================== */}
+
 
 
 
@@ -1498,6 +1717,7 @@ text-xs
 {error}
 
 
+
 </div>
 
 
@@ -1513,9 +1733,11 @@ text-xs
 
 
 
+
 {/* =====================================
 CHAT PANEL
 ===================================== */}
+
 
 
 
@@ -1526,11 +1748,11 @@ className="
 
 lg:col-span-3
 
-bg-slate-900
+bg-surface
 
 border
 
-border-slate-800
+border-border
 
 rounded-2xl
 
@@ -1557,6 +1779,7 @@ MESSAGES AREA
 
 
 
+
 <div
 
 
@@ -1570,7 +1793,7 @@ p-5
 
 space-y-5
 
-bg-slate-950/30
+bg-surface/30
 
 "
 
@@ -1605,6 +1828,7 @@ return (
 key={message.id}
 
 
+
 className={
 
 `
@@ -1627,9 +1851,11 @@ isAI
 
 }
 
+
 `
 
 }
+
 
 
 >
@@ -1642,6 +1868,7 @@ isAI
 
 
 {/* AI ICON */}
+
 
 
 
@@ -1661,11 +1888,11 @@ w-9
 
 rounded-xl
 
-bg-sky-500/10
+bg-ai/10
 
 border
 
-border-sky-500/20
+border-ai/20
 
 flex
 
@@ -1684,7 +1911,8 @@ shrink-0
 
 size={18}
 
-className="text-sky-400"
+
+className="text-ai"
 
 />
 
@@ -1704,7 +1932,9 @@ className="text-sky-400"
 
 
 
+
 {/* MESSAGE BOX */}
+
 
 
 
@@ -1737,21 +1967,23 @@ isAI
 ?
 
 
-"bg-slate-900 border border-slate-800 text-slate-200"
+"bg-surface border border-border text-text-primary"
 
 
 :
 
 
-"bg-sky-600 text-white"
+"bg-primary text-white"
 
 
 
 }
+
 
 `
 
 }
+
 
 
 >
@@ -1765,6 +1997,7 @@ isAI
 {message.text}
 
 
+
 </p>
 
 
@@ -1775,6 +2008,7 @@ isAI
 
 
 {/* INTENT DISPLAY */}
+
 
 
 
@@ -1793,13 +2027,13 @@ mt-3
 
 text-[10px]
 
-text-sky-400
+text-ai
 
 font-mono
 
 border-t
 
-border-slate-700
+border-border
 
 pt-2
 
@@ -1814,12 +2048,14 @@ Intent:
 
 
 
+
 </div>
 
 
 )
 
 }
+
 
 
 
@@ -1851,6 +2087,7 @@ text-right
 {message.timestamp}
 
 
+
 </span>
 
 
@@ -1871,6 +2108,7 @@ text-right
 
 
 
+
 {
 
 
@@ -1888,11 +2126,11 @@ w-9
 
 rounded-full
 
-bg-slate-800
+bg-surface
 
 border
 
-border-slate-700
+border-border
 
 flex
 
@@ -1926,6 +2164,7 @@ U
 
 
 
+
 </div>
 
 
@@ -1936,9 +2175,12 @@ U
 }
 
 
+
 )
 
 }
+<div ref={messagesEndRef} />
+
 
 
 
@@ -1951,6 +2193,7 @@ U
 {/* =====================================
 AI THINKING
 ===================================== */}
+
 
 
 
@@ -1988,11 +2231,11 @@ w-9
 
 rounded-xl
 
-bg-sky-500/10
+bg-ai/10
 
 border
 
-border-sky-500/20
+border-ai/20
 
 flex
 
@@ -2011,7 +2254,8 @@ animate-pulse
 
 size={18}
 
-className="text-sky-400"
+
+className="text-ai"
 
 />
 
@@ -2029,11 +2273,11 @@ className="text-sky-400"
 
 className="
 
-bg-slate-900
+bg-surface
 
 border
 
-border-slate-800
+border-border
 
 px-4
 
@@ -2043,7 +2287,7 @@ rounded-xl
 
 text-xs
 
-text-slate-400
+text-text-secondary
 
 "
 
@@ -2076,16 +2320,13 @@ SHIVINFRA AI is thinking...
 
 
 
+
 </div>
 
 
 
 
 
-// ============================================
-// PART 4 / 4
-// INPUT + FOOTER + EXPORT
-// ============================================
 
 
 
@@ -2098,6 +2339,7 @@ INPUT AREA
 
 
 
+
 <div
 
 
@@ -2105,9 +2347,9 @@ className="
 
 border-t
 
-border-slate-800
+border-border
 
-bg-slate-950/50
+bg-surface/50
 
 p-4
 
@@ -2136,6 +2378,7 @@ value={inputText}
 
 
 
+
 onChange={(e)=>
 
 
@@ -2146,6 +2389,7 @@ e.target.value
 )
 
 }
+
 
 
 
@@ -2170,7 +2414,9 @@ handleSendMessage();
 
 
 
+
 }}
+
 
 
 
@@ -2184,11 +2430,11 @@ className="
 
 flex-1
 
-bg-slate-900
+bg-surface
 
 border
 
-border-slate-800
+border-border
 
 rounded-xl
 
@@ -2200,11 +2446,11 @@ text-sm
 
 text-white
 
-placeholder:text-slate-500
+placeholder:text-text-secondary
 
 focus:outline-none
 
-focus:border-sky-500
+focus:border-ai
 
 "
 
@@ -2235,16 +2481,18 @@ handleSendMessage()
 
 
 
+
 disabled={loading}
+
 
 
 
 
 className="
 
-bg-sky-600
+bg-ai
 
-hover:bg-sky-700
+hover:bg-ai-hover
 
 disabled:opacity-50
 
@@ -2271,6 +2519,7 @@ justify-center
 <Send
 
 size={18}
+
 
 />
 
@@ -2318,6 +2567,7 @@ AI FOOTER STATUS
 
 
 
+
 <div
 
 
@@ -2333,7 +2583,7 @@ gap-2
 
 text-[10px]
 
-text-slate-500
+text-text-secondary
 
 "
 
@@ -2361,7 +2611,7 @@ Powered by SHIVINFRA AI Agent
 
 <span>
 
-Web + WhatsApp Automation Ready
+Configuration-dependent external services
 
 </span>
 

@@ -3,8 +3,10 @@ import { Router } from "express";
 import { AuthController } from "../controllers/authController.ts";
 import {
   validateBody,
-  loginSchema
+  loginSchema,
+  registerSchema
 } from "../middleware/validator.ts";
+import loginLimiter from "../middleware/loginLimiter.ts";
 
 
 const authRouter = Router();
@@ -17,6 +19,7 @@ const authRouter = Router();
 
 authRouter.post(
   "/register",
+  validateBody(registerSchema),
   AuthController.register
 );
 
@@ -28,6 +31,7 @@ authRouter.post(
 
 authRouter.post(
   "/login",
+  loginLimiter,
   validateBody(loginSchema),
   AuthController.login
 );
@@ -46,8 +50,13 @@ authRouter.post(
 
 
 // ===============================
-// FORGOT PASSWORD
+// LOGOUT
 // ===============================
+
+authRouter.post(
+  "/logout",
+  AuthController.logout
+);
 
 authRouter.post(
   "/forgot-password",

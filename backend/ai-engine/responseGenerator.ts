@@ -820,7 +820,7 @@ function formatLeads(
             (lead: any, index: number) => {
 
                 const name =
-                    lead.name ||
+                    lead.full_name ||
                     lead.customer_name ||
                     "Unknown";
 
@@ -1041,10 +1041,29 @@ function formatBills(
                     "Unknown Vendor";
 
 
+                const invoiceNumber =
+                    bill.invoice_number ||
+                    bill.bill_number;
+
+
                 const amount =
                     Number(
                         bill.amount || 0
                     );
+
+
+                const billDate =
+                    bill.bill_date ||
+                    bill.date;
+
+
+                const projectName =
+                    bill.projects?.project_name ||
+                    bill.project_name;
+
+
+                const material =
+                    bill.material;
 
 
                 lines.push(
@@ -1052,24 +1071,42 @@ function formatBills(
                 );
 
 
-                lines.push(
-                    `💰 ${formatCurrency(amount)}`
-                );
-
-
-                if (bill.date) {
+                if (invoiceNumber) {
 
                     lines.push(
-                        `📅 ${bill.date}`
+                        `📄 ${invoiceNumber}`
                     );
 
                 }
 
 
-                if (bill.material) {
+                lines.push(
+                    `💰 ${formatCurrency(amount)}`
+                );
+
+
+                if (billDate) {
 
                     lines.push(
-                        `🧱 ${bill.material}`
+                        `📅 ${billDate}`
+                    );
+
+                }
+
+
+                if (projectName) {
+
+                    lines.push(
+                        `🏗️ ${projectName}`
+                    );
+
+                }
+
+
+                if (material) {
+
+                    lines.push(
+                        `🧱 ${material}`
                     );
 
                 }
@@ -1274,6 +1311,15 @@ function formatMaterials(
 
                     lines.push(
                         `⭐ ${item.rating}`
+                    );
+
+                }
+
+
+                if (item.mapUrl) {
+
+                    lines.push(
+                        `🗺️ Map: ${item.mapUrl}`
                     );
 
                 }
@@ -1499,6 +1545,15 @@ function extractArray(
     ) {
 
         return result.items;
+
+    }
+
+
+    if (
+        Array.isArray(result?.data?.results)
+    ) {
+
+        return result.data.results;
 
     }
 

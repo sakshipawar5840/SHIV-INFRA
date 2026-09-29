@@ -100,9 +100,67 @@ from "./routes/notificationRoutes.ts";
 
 
 import {
+    inventoryRouter
+}
+from "./routes/inventoryRoutes.ts";
+
+
+import {
+    vendorRouter
+}
+from "./routes/vendorRoutes.ts";
+
+
+import {
+    taskRouter
+}
+from "./routes/taskRoutes.ts";
+
+
+import {
+    documentRouter
+}
+from "./routes/documentRoutes.ts";
+
+
+import {
+    userRouter
+}
+from "./routes/userRoutes.ts";
+
+
+import {
+    settingRouter
+}
+from "./routes/settingRoutes.ts";
+
+
+import {
+    activityLogRouter
+}
+from "./routes/activityLogRoutes.ts";
+
+
+import {
+    inquiryRouter
+}
+from "./routes/inquiryRoutes.ts";
+
+
+import {
     dashboardRouter
 }
 from "./routes/dashboardRoutes.ts";
+
+
+import googleOAuthRouter
+from "./routes/googleOAuthRoutes.ts";
+
+import broadcastRouter
+from "./routes/broadcastRoutes.ts";
+
+import channelRouter
+from "./routes/channelRoutes.ts";
 
 
 import {
@@ -129,37 +187,37 @@ export const backendRouter = Router();
 // ============================================
 // SECURITY MIDDLEWARE
 // ============================================
+const isProduction = process.env.NODE_ENV === "production";
 
-
+const allowedOrigins = isProduction
+    ? [process.env.FRONTEND_URL].filter(Boolean)
+    : [
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:3000",
+      ];
 
 backendRouter.use(
-
-cors({
-
-    origin:"*",
-
-
-    methods:[
-
-        "GET",
-        "POST",
-        "PUT",
-        "PATCH",
-        "DELETE",
-        "OPTIONS"
-
-    ],
-
-
-    allowedHeaders:[
-
-        "Content-Type",
-        "Authorization"
-
-    ]
-
-})
-
+    cors({
+        origin: (origin, callback) => {
+            if (!origin || allowedOrigins.includes(origin)) {
+                return callback(null, true);
+            }
+            return callback(new Error("Not allowed by CORS"), false);
+        },
+        methods: [
+            "GET",
+            "POST",
+            "PUT",
+            "PATCH",
+            "DELETE",
+            "OPTIONS",
+        ],
+        allowedHeaders: [
+            "Content-Type",
+            "Authorization",
+        ],
+    })
 );
 
 
@@ -531,6 +589,26 @@ whatsappRouter
 
 
 // ============================================
+// BROADCAST MESSAGING
+// ============================================
+
+
+v1.use(
+    "/broadcasts",
+    broadcastRouter
+);
+
+// ============================================
+// MESSAGING CHANNELS (WhatsApp / Facebook / IG / SMS)
+// ============================================
+
+v1.use(
+    "/channels",
+    channelRouter
+);
+
+
+// ============================================
 // REPORT ENGINE
 // ============================================
 
@@ -605,6 +683,134 @@ siteVisitRouter
 
 
 
+
+
+
+
+// ============================================
+// INVENTORY
+// ============================================
+
+
+v1.use(
+
+"/inventory",
+
+inventoryRouter
+
+);
+
+
+// ============================================
+// VENDORS
+// ============================================
+
+
+v1.use(
+
+"/vendors",
+
+vendorRouter
+
+);
+
+
+// ============================================
+// TASKS
+// ============================================
+
+
+v1.use(
+
+"/tasks",
+
+taskRouter
+
+);
+
+
+// ============================================
+// DOCUMENTS
+// ============================================
+
+
+v1.use(
+
+"/documents",
+
+documentRouter
+
+);
+
+
+// ============================================
+// USERS
+// ============================================
+
+
+v1.use(
+
+"/users",
+
+userRouter
+
+);
+
+
+// ============================================
+// SETTINGS
+// ============================================
+
+
+v1.use(
+
+"/settings",
+
+settingRouter
+
+);
+
+
+// ============================================
+// ACTIVITY LOGS
+// ============================================
+
+
+v1.use(
+
+"/activity-logs",
+
+activityLogRouter
+
+);
+
+
+// ============================================
+// INQUIRIES
+// ============================================
+
+
+v1.use(
+
+"/inquiries",
+
+inquiryRouter
+
+);
+
+
+// ============================================
+// GOOGLE OAUTH
+// ============================================
+
+
+v1.use(
+
+"/google/oauth",
+
+googleOAuthRouter
+
+);
 
 
 

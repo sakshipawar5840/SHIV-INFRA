@@ -1,11 +1,18 @@
 import { Router } from "express";
 import { ExpenseController } from "../controllers/expenseController.ts";
 import { authenticateJWT, authorizeRoles } from "../middleware/auth.ts";
-import { validateBody, expenseSchema } from "../middleware/validator.ts";
+import { validateBody } from "../middleware/validator.ts";
+import { expenseSchema, updateExpenseSchema } from "../middleware/expenseValidator.ts";
 
 export const expenseRouter = Router();
 
 expenseRouter.get("/", authenticateJWT, ExpenseController.getExpenses);
+
+expenseRouter.get(
+  "/:id",
+  authenticateJWT,
+  ExpenseController.getExpenseById
+);
 
 expenseRouter.post(
   "/",
@@ -14,7 +21,12 @@ expenseRouter.post(
   ExpenseController.createExpense
 );
 
-expenseRouter.put("/:id", authenticateJWT, ExpenseController.updateExpense);
+expenseRouter.put(
+  "/:id",
+  authenticateJWT,
+  validateBody(updateExpenseSchema),
+  ExpenseController.updateExpense
+);
 
 expenseRouter.delete(
   "/:id",

@@ -1,21 +1,22 @@
 import { Router } from "express";
 import { NotificationController } from "../controllers/notificationController.ts";
+import { authenticateJWT, authorizeRoles } from "../middleware/auth.ts";
 
 export const notificationRouter = Router();
 
 // Retrieve list
-notificationRouter.get("/", NotificationController.getNotifications);
+notificationRouter.get("/", authenticateJWT, NotificationController.getNotifications);
 
 // Simulated actions trigger
-notificationRouter.post("/trigger", NotificationController.triggerAction);
+notificationRouter.post("/trigger", authenticateJWT, authorizeRoles("Admin", "Super Admin"), NotificationController.triggerAction);
 
 // Read-all
-notificationRouter.put("/read-all", NotificationController.markAllAsRead);
+notificationRouter.put("/read-all", authenticateJWT, authorizeRoles("Admin", "Super Admin"), NotificationController.markAllAsRead);
 
 // Single read
-notificationRouter.put("/:id/read", NotificationController.markAsRead);
+notificationRouter.put("/:id/read", authenticateJWT, authorizeRoles("Admin", "Super Admin"), NotificationController.markAsRead);
 
 // Delete
-notificationRouter.delete("/:id", NotificationController.deleteNotification);
+notificationRouter.delete("/:id", authenticateJWT, authorizeRoles("Admin", "Super Admin"), NotificationController.deleteNotification);
 
 export default notificationRouter;

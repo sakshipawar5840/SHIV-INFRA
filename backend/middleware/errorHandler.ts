@@ -12,9 +12,11 @@ export const errorHandler = (
   res: Response,
   next: NextFunction
 ) => {
+  const isProduction = process.env.NODE_ENV === "production";
+
   console.error("[GLOBAL ERROR HANDLER]:", {
     message: err.message,
-    stack: err.stack,
+    stack: isProduction ? undefined : err.stack,
     code: err.code,
     statusCode: err.status || err.statusCode,
   });
@@ -37,6 +39,7 @@ export const errorHandler = (
   res.status(statusCode).json({
     success: false,
     error: errorMessage,
+    message: errorMessage,
     code: err.code || "INTERNAL_SERVER_ERROR",
   });
 };

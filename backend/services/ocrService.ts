@@ -1,6 +1,9 @@
 import { createWorker } from "tesseract.js";
 import fs from "fs";
 import path from "path";
+import { PDFParse } from "pdf-parse";
+
+const NODE_ENV = process.env.NODE_ENV || "development";
 
 export interface OCRExtractionResult {
   vendor: string;
@@ -9,6 +12,7 @@ export interface OCRExtractionResult {
   amount: number;
   bill_date: string;
   material: string;
+  text: string;
   ocr_status: "Success" | "Failed";
 }
 
@@ -19,11 +23,44 @@ export class OCRService {
   static async extractInvoiceData(filePath: string): Promise<OCRExtractionResult> {
     const ext = path.extname(filePath).toLowerCase();
     
-    // For PDFs or complex scanned structures, we'll parse text or use tesseract image extraction
     if (ext === ".pdf") {
-      // In a real-world scenario, you can extract text via pdf-parse or render page-to-image and OCR.
-      // We'll perform a robust regex fallback on pdf strings or simulation
-      return this.simulateOCR(filePath, "PDF");
+      console.log(`[SHIVINFRA OCR] Extracting text from PDF: ${filePath}`);
+      try {
+        const dataBuffer = fs.readFileSync(filePath);
+        const uint8Data = new Uint8Array(dataBuffer);
+        const parser = new PDFParse(uint8Data);
+        const result = await parser.getText();
+        const text = result.text || "";
+        
+        console.log("[SHIVINFRA OCR] PDF text extracted successfully:", text.substring(0, 150));
+        
+        if (!text || text.trim().length === 0) {
+          return {
+            vendor: "",
+            gst_number: "",
+            invoice_number: "",
+            amount: 0,
+            bill_date: "",
+            material: "",
+            text: "",
+            ocr_status: "Failed"
+          };
+        }
+        
+        return this.parseExtractedText(text);
+      } catch (error) {
+        console.error("[SHIVINFRA OCR] PDF extraction failed:", error);
+        return {
+          vendor: "",
+          gst_number: "",
+          invoice_number: "",
+          amount: 0,
+          bill_date: "",
+          material: "",
+          text: "",
+          ocr_status: "Failed"
+        };
+      }
     }
 
     try {
@@ -33,10 +70,21 @@ export class OCRService {
       await worker.terminate();
 
       console.log("[SHIVINFRA OCR] Text extracted successfully:", text.substring(0, 150));
-      return this.parseExtractedText(text);
+      const parsed = this.parseExtractedText(text);
+      parsed.text = text;
+      return parsed;
     } catch (error) {
-      console.error("[SHIVINFRA OCR] Error processing image with Tesseract, falling back:", error);
-      return this.simulateOCR(filePath, "IMAGE");
+      console.error("[SHIVINFRA OCR] Error processing image with Tesseract:", error);
+      return {
+        vendor: "",
+        gst_number: "",
+        invoice_number: "",
+        amount: 0,
+        bill_date: "",
+        material: "",
+        text: "",
+        ocr_status: "Failed"
+      };
     }
   }
 
@@ -46,13 +94,12 @@ export class OCRService {
   private static parseExtractedText(text: string): OCRExtractionResult {
     const lines = text.split("\n");
     
-    // Default values
-    let vendor = "General Supplies Ltd";
+    let vendor = "";
     let gst_number = "";
     let invoice_number = "";
     let amount = 0;
-    let bill_date = new Date().toISOString().split("T")[0];
-    let material = "Aggregates";
+    let bill_date = "";
+    let material = "";
 
     // 1. Parse GSTIN (Standard Indian GSTIN format)
     const gstMatch = text.match(/\d{2}[A-Z]{5}\d{4}[A-Z]{1}[A-Z\d]{1}[Z]{1}[A-Z\d]{1}/i);
@@ -69,19 +116,15 @@ export class OCRService {
     }
 
     // 3. Parse Invoice Numbers
-    const invMatch = text.match(/(?:inv|invoice|bill|challan)(?:\s*(?:no|num|#))?\s*[:\-]?\s*([A-Za-z0-9\-/\\]+)/i);
+    const invMatch = text.match(/(?:invoice|bill|challan|inv)(?:\s*(?:no|num|#))?\s*[:\-]?\s*([A-Za-z0-9\-/\\]+)/i);
     if (invMatch) {
       invoice_number = invMatch[1];
-    } else {
-      invoice_number = "INV-" + Math.floor(100000 + Math.random() * 900000);
     }
 
     // 4. Parse Total amount values
-    const amountMatch = text.match(/(?:total|amount|net|sum|payable|gros)\s*(?:inr|rs|₹)?\s*[:\-]?\s*([0-9,]+(?:\.\d{2})?)/i);
+    const amountMatch = text.match(/(?:total|amount|net|sum|payable|gros)\s*[:\-]?\s*(?:inr|rs|₹)?\s*([0-9,]+(?:\.\d{2})?)/i);
     if (amountMatch) {
       amount = parseFloat(amountMatch[1].replace(/,/g, ""));
-    } else {
-      amount = Math.floor(15000 + Math.random() * 60000); // Default placeholder
     }
 
     // 5. Material categorization
@@ -109,14 +152,30 @@ export class OCRService {
       amount,
       bill_date,
       material,
-      ocr_status: "Success",
+      text,
+      ocr_status: "Success"
     };
   }
 
   /**
-   * Generates robust mock fallback data for material invoices
+   * Generates mock fallback data for material invoices
+   * ONLY FOR DEVELOPMENT/TESTING - NOT FOR PRODUCTION
    */
   static simulateOCR(filePath: string, type: "PDF" | "IMAGE"): OCRExtractionResult {
+    if (NODE_ENV === "production") {
+      console.error("[SHIVINFRA OCR] simulateOCR called in production - returning empty result");
+      return {
+        vendor: "",
+        gst_number: "",
+        invoice_number: "",
+        amount: 0,
+        bill_date: "",
+        material: "",
+        text: "",
+        ocr_status: "Failed"
+      };
+    }
+    
     const filename = path.basename(filePath).toLowerCase();
     
     let vendor = "Maha Cement Industries";
@@ -143,7 +202,8 @@ export class OCRService {
       amount,
       bill_date: new Date().toISOString().split("T")[0],
       material,
-      ocr_status: "Success",
+      text: "",
+      ocr_status: "Success"
     };
   }
 }

@@ -304,7 +304,7 @@ return res.status(201).json({
     message:
     "Customer created successfully",
 
-    data:customer
+    data:customer.data
 
 });
 
@@ -384,7 +384,7 @@ try{
         message:
         "Customer updated successfully",
 
-        data:updated
+        data:updated.data
 
     });
 
@@ -444,7 +444,7 @@ try{
 
         success:true,
 
-        data:result
+        data:result.data
 
     });
 
@@ -515,7 +515,7 @@ try{
         message:
         "Customer moved to recycle bin",
 
-        data:result
+        data:result.data
 
     });
 
@@ -577,7 +577,7 @@ try{
 
         success:true,
 
-        data:result
+        data:result.data
 
     });
 
@@ -638,7 +638,7 @@ try{
 
         success:true,
 
-        data:result
+        data:result.data
 
     });
 

@@ -1,4 +1,4 @@
-// =====================================================
+﻿// =====================================================
 // SHIVINFRA WHATSAPP WEBHOOK SERVICE
 // PRODUCTION CLEAN VERSION
 // PART 1 / 5
@@ -13,26 +13,30 @@
 // FLOW:
 //
 // Meta WhatsApp
-//      ↓
+//      â†“
 // Webhook
-//      ↓
+//      â†“
 // Validation
-//      ↓
+//      â†“
 // Message Extraction
-//      ↓
+//      â†“
 // Duplicate Protection
-//      ↓
+//      â†“
 // User Context
-//      ↓
+//      â†“
 // Text / Media Pipeline
 //
 // =====================================================
 
 import { runAgent } from "../../ai-engine/agent";
 
+import { saveConversation } from "../../ai-engine/memory";
+
 import WhatsAppService from "../whatsappService.ts";
 
 import customerService from "../../services/customerService.ts";
+
+import projectService from "../../services/projectService.ts";
 
 import activityLogger from "../../services/activityLoggerService.ts";
 
@@ -41,6 +45,8 @@ import billService from "../../services/modules/BillService.ts";
 import OCRService from "../../services/ocrService.ts";
 
 import { supabaseAdmin as supabase } from "../../config/supabase.ts";
+
+import ConfirmationService from "../confirmationService.ts";
 
 import fs from "fs";
 
@@ -107,7 +113,8 @@ interface WhatsAppUserContext {
     role:
         | "ADMIN"
         | "ENGINEER"
-        | "CUSTOMER";
+        | "CUSTOMER"
+        | "SALES";
 
     channel: "WHATSAPP";
 }
@@ -117,7 +124,6 @@ interface WhatsAppUserContext {
 // =====================================================
 // BILL CONFIRMATION STATE
 // =====================================================
-
 
 
 const pendingBillConfirmations =
@@ -156,6 +162,152 @@ function getBillConfirmationKey(
 
 
 
+}
+
+
+// =====================================================
+// OCR MISSING DATA STATE
+// =====================================================
+
+
+
+const pendingOCRConfirmations =
+    new Map<
+        string,
+        {
+            billData: any;
+
+            phone: string;
+
+            companyId: string;
+
+            missingFields: string[];
+
+            timestamp: number;
+
+        }
+    >();
+
+
+
+const OCR_CONFIRMATION_TTL_MS =
+    30 * 60 * 1000;
+
+
+
+function getOCRConfirmationKey(
+    phone: string,
+    companyId: string
+): string {
+
+
+    return (
+        String(phone || "")
+        + "|"
+        + String(companyId || "")
+    );
+
+
+}
+
+
+
+// =====================================================
+// PERSISTENT CONFIRMATION HELPERS
+// The in-memory Maps above remain as a fast-path cache,
+// but every create/update is ALSO written to the Supabase
+// pending_confirmations table so state survives restarts.
+// =====================================================
+
+async function persistBillConfirmation(
+    phone: string,
+    companyId: string,
+    billData: any,
+    missingFields?: string[]
+): Promise<void> {
+    try {
+        await ConfirmationService.createConfirmation(
+            companyId,
+            phone,
+            {
+                intent: { name: "SAVE_BILL" },
+                userId: "whatsapp",
+                role: "ENGINEER",
+                channel: "WHATSAPP",
+                originalMessage: "bill_confirmation",
+                billData,
+                missingFields
+            } as any
+        );
+    } catch (error) {
+        console.error("[CONFIRMATION] persistBillConfirmation failed:", error);
+    }
+}
+
+async function lookupBillConfirmation(
+    phone: string,
+   companyId: string
+): Promise<any> {
+    // Prefer the persistent store
+    const persistent = await ConfirmationService.getPendingConfirmation(
+        companyId,
+        phone
+    );
+    if (persistent) {
+        const data = persistent.intent_data as any;
+        return {
+            billData: data?.billData,
+            phone: persistent.phone,
+            companyId: persistent.company_id,
+            missingFields: data?.missingFields,
+            timestamp: new Date(persistent.created_at).getTime(),
+            id: persistent.id
+        };
+    }
+    // Fall back to the in-memory cache
+    const key = getBillConfirmationKey(phone, companyId);
+    return pendingBillConfirmations.get(key) || null;
+}
+
+async function lookupOCRConfirmation(
+    phone: string,
+    companyId: string
+): Promise<any> {
+    const persistent = await ConfirmationService.getPendingConfirmation(
+        companyId,
+        phone
+    );
+    if (persistent) {
+        const data = persistent.intent_data as any;
+        return {
+            billData: data?.billData,
+            phone: persistent.phone,
+           companyId: persistent.company_id,
+            missingFields: data?.missingFields,
+            timestamp: new Date(persistent.created_at).getTime(),
+            id: persistent.id
+        };
+    }
+    const key = getOCRConfirmationKey(phone, companyId);
+    return pendingOCRConfirmations.get(key) || null;
+}
+
+async function cancelBillConfirmation(
+    phone: string,
+    companyId: string
+): Promise<void> {
+    const key = getBillConfirmationKey(phone, companyId);
+    pendingBillConfirmations.delete(key);
+    await ConfirmationService.cancelPending(companyId, phone);
+}
+
+async function cancelOCRConfirmation(
+    phone: string,
+   companyId: string
+): Promise<void> {
+    const key = getOCRConfirmationKey(phone,companyId);
+    pendingOCRConfirmations.delete(key);
+    await ConfirmationService.cancelPending(companyId, phone);
 }
 
 
@@ -203,7 +355,7 @@ class WhatsAppWebhookService {
     constructor() {
 
         console.log(
-            "🚀 SHIVINFRA WHATSAPP WEBHOOK SERVICE READY"
+            "ðŸš€ SHIVINFRA WHATSAPP WEBHOOK SERVICE READY"
         );
 
     }
@@ -216,6 +368,8 @@ class WhatsAppWebhookService {
     public async processIncoming(
         payload: any
     ): Promise<WhatsAppWebhookResponse> {
+
+        let phone: string | undefined;
 
         try {
 
@@ -289,6 +443,13 @@ class WhatsAppWebhookService {
                 this.extractMessage(payload);
 
 
+            if (message?.phone) {
+
+                phone = message.phone;
+
+            }
+
+
             if (!message) {
 
                 return {
@@ -315,7 +476,7 @@ class WhatsAppWebhookService {
             ) {
 
                 console.warn(
-                    "⚠️ DUPLICATE WHATSAPP MESSAGE IGNORED",
+                    "âš ï¸ DUPLICATE WHATSAPP MESSAGE IGNORED",
                     message.id
                 );
 
@@ -347,7 +508,7 @@ class WhatsAppWebhookService {
             // -----------------------------------------
 
             console.log(
-                "📩 WHATSAPP MESSAGE RECEIVED",
+                "ðŸ“© WHATSAPP MESSAGE RECEIVED",
                 {
 
                     id:
@@ -376,7 +537,8 @@ class WhatsAppWebhookService {
 
             const user =
                 await this.resolveUserContext(
-                    message.phone
+                    message.phone,
+                    { payload }
                 );
 
 
@@ -478,11 +640,24 @@ class WhatsAppWebhookService {
 
             console.error(
 
-                "❌ WHATSAPP PROCESS ERROR",
+                "âŒ WHATSAPP PROCESS ERROR",
 
                 this.normalizeError(error)
 
             );
+
+
+            if (phone) {
+
+                await this.sendErrorMessage(
+
+                    phone,
+
+                    "I couldn't complete that request right now. Please try again."
+
+                );
+
+            }
 
 
             return {
@@ -558,7 +733,7 @@ class WhatsAppWebhookService {
 
             console.error(
 
-                "❌ WEBHOOK VALIDATION ERROR",
+                "âŒ WEBHOOK VALIDATION ERROR",
 
                 this.normalizeError(error)
 
@@ -872,7 +1047,7 @@ class WhatsAppWebhookService {
 
             console.error(
 
-                "❌ MESSAGE EXTRACTION ERROR",
+                "âŒ MESSAGE EXTRACTION ERROR",
 
                 this.normalizeError(error)
 
@@ -891,17 +1066,18 @@ class WhatsAppWebhookService {
     // =================================================
     //
     // WhatsApp Number
-    //      ↓
+    //      â†“
     // Customer
-    //      ↓
+    //      â†“
     // Company
-    //      ↓
+    //      â†“
     // Role
     //
     // =================================================
 
     private async resolveUserContext(
-        phone: string
+        phone: string,
+        context?: { payload?: any; metadataPhoneId?: string }
     ): Promise<WhatsAppUserContext | null> {
 
         try {
@@ -919,22 +1095,58 @@ class WhatsAppWebhookService {
             }
 
 
-            const companyId =
-                String(
-                    process.env.DEFAULT_COMPANY_ID
-                    || ""
-                ).trim();
+            const metadataPhoneId =
+                context?.metadataPhoneId
+                || this.extractPhoneNumberId(context?.payload);
 
+            let resolvedCompany = null;
+            let phoneIdResolved = false;
 
-            if (!companyId) {
-
-                console.error(
-                    "❌ DEFAULT_COMPANY_ID missing"
-                );
-
-                return null;
-
+            if (metadataPhoneId) {
+                phoneIdResolved = true;
+                resolvedCompany =
+                    await this.resolveCompanyByPhoneId(
+                        metadataPhoneId
+                    );
             }
+
+            if (!resolvedCompany) {
+                // Only fall back to DEFAULT_COMPANY_ID when NO
+                // phone_number_id was present at all.
+                // An unknown/unmapped phone_number_id must NEVER
+                // be silently assigned to a company.
+                if (!phoneIdResolved) {
+                    const fallbackId =
+                        String(
+                            process.env.DEFAULT_COMPANY_ID
+                            || ""
+                        ).trim();
+                    if (fallbackId) {
+                        resolvedCompany = {
+                            id: fallbackId,
+                            phone_number_id: null
+                        };
+                        console.warn(
+                            "[SHIVINFRA WHATSAPP] No phone_number_id in metadata; falling back to DEFAULT_COMPANY_ID"
+                        );
+                    }
+                } else {
+                    console.error(
+                        "[SHIVINFRA WHATSAPP] REJECTED: unknown/unmapped phone_number_id",
+                        metadataPhoneId
+                    );
+                    return null;
+                }
+            }
+
+            if (!resolvedCompany) {
+                console.error(
+                    "WHATSAPP COMPANY RESOLUTION FAILED: no phone_number_id mapping and no DEFAULT_COMPANY_ID"
+                );
+                return null;
+            }
+
+            const companyId = resolvedCompany.id;
 
 
             // -----------------------------------------
@@ -949,6 +1161,7 @@ class WhatsAppWebhookService {
                     .eq("company_id", companyId)
                     .maybeSingle();
 
+            console.log("[WHATSAPP DEBUG] User lookup:", { phone: normalizedPhone, companyId, user: user?.id, userRole: user?.role, userError: userError?.message });
 
             if (user && !userError) {
 
@@ -958,11 +1171,18 @@ class WhatsAppWebhookService {
                     .toUpperCase();
 
 
-                if (
-                    userRole === "ADMIN" ||
+                const normalizedRole =
                     userRole === "SUPER ADMIN" ||
-                    userRole === "ENGINEER" ||
                     userRole === "SALES MANAGER"
+                        ? "ADMIN"
+                        : userRole;
+
+
+                if (
+                    normalizedRole === "ADMIN" ||
+                    normalizedRole === "ENGINEER" ||
+                    normalizedRole === "CUSTOMER" ||
+                    normalizedRole === "SALES"
                 ) {
 
                     return {
@@ -971,7 +1191,7 @@ class WhatsAppWebhookService {
 
                         company_id: user.company_id,
 
-                        role: userRole,
+                        role: normalizedRole,
 
                         channel: "WHATSAPP"
 
@@ -1027,7 +1247,7 @@ class WhatsAppWebhookService {
                 ) {
 
                     console.warn(
-                        "⚠️ CUSTOMER COMPANY MISMATCH",
+                        "âš ï¸ CUSTOMER COMPANY MISMATCH",
                         {
 
                             phone:
@@ -1110,7 +1330,7 @@ class WhatsAppWebhookService {
 
             console.error(
 
-                "❌ USER CONTEXT ERROR",
+                "âŒ USER CONTEXT ERROR",
 
                 this.normalizeError(error)
 
@@ -1212,7 +1432,7 @@ class WhatsAppWebhookService {
 
             console.error(
 
-                "❌ DUPLICATE CHECK ERROR",
+                "âŒ DUPLICATE CHECK ERROR",
 
                 this.normalizeError(error)
 
@@ -1286,7 +1506,7 @@ class WhatsAppWebhookService {
 
             console.error(
 
-                "❌ DUPLICATE CACHE CLEANUP ERROR",
+                "âŒ DUPLICATE CACHE CLEANUP ERROR",
 
                 this.normalizeError(error)
 
@@ -1496,6 +1716,100 @@ private async handleTextMessage(
 
 
         // =================================================
+        // CHECK OCR MISSING DATA
+        // =================================================
+
+        const ocrConfirmationKey =
+            getOCRConfirmationKey(
+                message.phone,
+                user.company_id
+            );
+
+        const pendingOCRConfirmation =
+            pendingOCRConfirmations.get(
+                ocrConfirmationKey
+            );
+
+        if (
+            pendingOCRConfirmation
+            &&
+            Date.now() - pendingOCRConfirmation.timestamp < OCR_CONFIRMATION_TTL_MS
+        ) {
+            await saveConversation({
+                userId: user.id || "unknown",
+                companyId: user.company_id,
+                phone: message.phone,
+                role: "USER",
+                message: text,
+                channel: "WHATSAPP"
+            });
+
+            const updatedBillData = { ...pendingOCRConfirmation.billData };
+            const lowerText = text.toLowerCase().trim();
+            let merged = false;
+
+            if (!updatedBillData.vendor_name && !updatedBillData.vendor && lowerText.includes("vendor")) {
+                updatedBillData.vendor_name = text.replace(/vendor\s*[:\-]?\s*/i, "").trim();
+                updatedBillData.vendor = updatedBillData.vendor_name;
+                merged = true;
+            }
+
+            if (!updatedBillData.amount && !lowerText.includes("amount")) {
+                const amountMatch = text.match(/(?:amount|₹|rs\.?)\s*(\d+(?:\.\d+)?)/i);
+                if (amountMatch) {
+                    updatedBillData.amount = Number(amountMatch[1]);
+                    merged = true;
+                }
+            }
+
+            if (!updatedBillData.bill_date && !updatedBillData.date && !lowerText.includes("date")) {
+                const dateMatch = text.match(/(\d{1,2}[\/\-\.]\d{1,2}[\/\-\.]\d{2,4})/);
+                if (dateMatch) {
+                    updatedBillData.bill_date = dateMatch[1];
+                    merged = true;
+                }
+            }
+
+            if (!updatedBillData.project_id && !updatedBillData.project_name && !lowerText.includes("project") && !lowerText.includes("site")) {
+                updatedBillData.project_name = text.trim();
+                merged = true;
+            }
+
+            if (merged) {
+                pendingOCRConfirmations.delete(ocrConfirmationKey);
+                const validation = this.validateOCRBill(updatedBillData);
+
+                if (validation.valid) {
+                    try {
+                        const bill = await billService.createBill(updatedBillData);
+                        if (bill) {
+                            await WhatsAppService.sendTextMessage(message.phone, "✅ Bill saved successfully!\n\n" + `🏣 Vendor: ${updatedBillData.vendor_name || updatedBillData.vendor || "N/A"}\n` + `💰 Amount: ₹${this.formatAmount(updatedBillData.amount)}\n` + `📅 Date: ${this.formatBillDate(updatedBillData.bill_date || updatedBillData.date || "N/A")}`);
+                            await saveConversation({ userId: user.id || "unknown", companyId: user.company_id, phone: message.phone, role: "AI", message: "✅ Bill saved successfully!", channel: "WHATSAPP" });
+                            return { success: true, message: "Bill saved successfully", data: bill };
+                        }
+                    } catch (error) {
+                        await WhatsAppService.sendTextMessage(message.phone, "❌ Failed to save bill. Please try again.");
+                        await saveConversation({ userId: user.id || "unknown", companyId: user.company_id, phone: message.phone, role: "AI", message: "❌ Failed to save bill. Please try again.", channel: "WHATSAPP" });
+                        return { success: false, message: "Bill save failed", error: this.normalizeError(error).message };
+                    }
+                } else {
+                    pendingOCRConfirmations.set(ocrConfirmationKey, { billData: updatedBillData, phone: message.phone, companyId: user.company_id, missingFields: validation.errors, timestamp: Date.now() });
+                    await persistBillConfirmation(message.phone, user.company_id, updatedBillData, validation.errors);
+                    const retryResponse = "I still need more details:\n\n" + validation.errors.map((e: string) => `• ${e}`).join("\n") + "\n\nPlease provide the missing details.";
+                    await saveConversation({ userId: user.id || "unknown", companyId: user.company_id, phone: message.phone, role: "AI", message: retryResponse, channel: "WHATSAPP" });
+                    await WhatsAppService.sendTextMessage(message.phone, this.truncateWhatsAppMessage(retryResponse));
+                    return { success: false, message: "OCR data still incomplete", data: { errors: validation.errors } };
+                }
+            } else {
+                pendingOCRConfirmations.delete(ocrConfirmationKey);
+                const retryResponse = "I could not match your message to the missing bill details. Please provide the missing information clearly.";
+                await saveConversation({ userId: user.id || "unknown", companyId: user.company_id, phone: message.phone, role: "AI", message: retryResponse, channel: "WHATSAPP" });
+                await WhatsAppService.sendTextMessage(message.phone, this.truncateWhatsAppMessage(retryResponse));
+                return { success: false, message: "OCR data update failed" };
+            }
+        }
+
+        // =================================================
         // CHECK BILL CONFIRMATION
         // =================================================
 
@@ -1542,6 +1856,29 @@ private async handleTextMessage(
                 );
 
 
+                await saveConversation({
+
+                    userId:
+                        user.id ||
+                        "unknown",
+
+                    companyId:
+                        user.company_id,
+
+                    phone:
+                        message.phone,
+
+                    role:
+                        "USER",
+
+                    message:
+                        text,
+
+                    channel:
+                        "WHATSAPP"
+
+                });
+
 
                 try {
 
@@ -1563,14 +1900,14 @@ private async handleTextMessage(
 
                             message.phone,
 
-                            "✅ Bill saved successfully!\n\n" +
-                            `🏢 Vendor: ${
+                            "âœ… Bill saved successfully!\n\n" +
+                            `ðŸ¢ Vendor: ${
                                 pendingBillConfirmation.billData.vendor_name || "N/A"
                             }\n` +
-                            `🧾 Invoice: ${
+                            `ðŸ§¾ Invoice: ${
                                 pendingBillConfirmation.billData.bill_number || "N/A"
                             }\n` +
-                            `💰 Amount: ₹${
+                            `ðŸ’° Amount: â‚¹${
                                 this.formatAmount(
                                     pendingBillConfirmation.billData.amount
                                 )
@@ -1578,6 +1915,29 @@ private async handleTextMessage(
 
                         );
 
+
+                        await saveConversation({
+
+                            userId:
+                                user.id ||
+                                "unknown",
+
+                            companyId:
+                                user.company_id,
+
+                            phone:
+                                message.phone,
+
+                            role:
+                                "AI",
+
+                            message:
+                                "âœ… Bill saved successfully!",
+
+                            channel:
+                                "WHATSAPP"
+
+                        });
 
 
                         return {
@@ -1607,10 +1967,33 @@ private async handleTextMessage(
 
                         message.phone,
 
-                        "❌ Failed to save bill. Please try again."
+                        "âŒ Failed to save bill. Please try again."
 
                     );
 
+
+                    await saveConversation({
+
+                        userId:
+                            user.id ||
+                            "unknown",
+
+                        companyId:
+                            user.company_id,
+
+                        phone:
+                            message.phone,
+
+                        role:
+                            "AI",
+
+                        message:
+                            "âŒ Failed to save bill. Please try again.",
+
+                        channel:
+                            "WHATSAPP"
+
+                    });
 
 
                     return {
@@ -1622,6 +2005,7 @@ private async handleTextMessage(
 
                         error:
                             this.normalizeError(error)
+                                .message
 
                     };
 
@@ -1647,15 +2031,61 @@ private async handleTextMessage(
                 );
 
 
+                await saveConversation({
+
+                    userId:
+                        user.id ||
+                        "unknown",
+
+                    companyId:
+                        user.company_id,
+
+                    phone:
+                        message.phone,
+
+                    role:
+                        "USER",
+
+                    message:
+                        text,
+
+                    channel:
+                        "WHATSAPP"
+
+                });
+
 
                 await WhatsAppService.sendTextMessage(
 
                     message.phone,
 
-                    "❌ Bill creation cancelled."
+                    "âŒ Bill creation cancelled."
 
                 );
 
+
+                await saveConversation({
+
+                    userId:
+                        user.id ||
+                        "unknown",
+
+                    companyId:
+                        user.company_id,
+
+                    phone:
+                        message.phone,
+
+                    role:
+                        "AI",
+
+                    message:
+                        "âŒ Bill creation cancelled.",
+
+                    channel:
+                        "WHATSAPP"
+
+                });
 
 
                 return {
@@ -1694,7 +2124,7 @@ private async handleTextMessage(
 
         console.log(
 
-            "💬 SHIVINFRA WHATSAPP AI REQUEST",
+            "ðŸ’¬ SHIVINFRA WHATSAPP AI REQUEST",
 
             {
 
@@ -1788,7 +2218,7 @@ private async handleTextMessage(
 
 
         console.log(
-            "🤖 SHIVINFRA AI AGENT RESULT",
+            "ðŸ¤– SHIVINFRA AI AGENT RESULT",
             {
                 intent,
                 success,
@@ -1904,7 +2334,7 @@ private async handleTextMessage(
 
         console.error(
 
-            "❌ WHATSAPP TEXT AI PIPELINE ERROR",
+            "âŒ WHATSAPP TEXT AI PIPELINE ERROR",
 
             {
 
@@ -2066,7 +2496,7 @@ private async sendAIResponse(
 
             response =
 
-                `✅ ${
+                `âœ… ${
                     String(
                         result?.message
                         || "Request completed successfully."
@@ -2079,7 +2509,7 @@ private async sendAIResponse(
 
             response =
 
-                `❌ ${
+                `âŒ ${
                     String(
                         result?.message
                         || "Unable to complete your request."
@@ -2199,7 +2629,7 @@ private async sendAIResponse(
 
                         response +=
 
-                            `📍 ${String(item.city)}\n`;
+                            `ðŸ“ ${String(item.city)}\n`;
 
                     }
 
@@ -2208,7 +2638,7 @@ private async sendAIResponse(
 
                         response +=
 
-                            `📌 ${String(item.location)}\n`;
+                            `ðŸ“Œ ${String(item.location)}\n`;
 
                     }
 
@@ -2221,7 +2651,7 @@ private async sendAIResponse(
 
                         response +=
 
-                            `📞 ${String(item.phone)}\n`;
+                            `ðŸ“ž ${String(item.phone)}\n`;
 
                     }
 
@@ -2240,7 +2670,7 @@ private async sendAIResponse(
 
                         response +=
 
-                            `💰 ₹${this.formatAmount(
+                            `ðŸ’° â‚¹${this.formatAmount(
                                 item.price
                             )}\n`;
 
@@ -2261,7 +2691,7 @@ private async sendAIResponse(
 
                         response +=
 
-                            `💰 ₹${this.formatAmount(
+                            `ðŸ’° â‚¹${this.formatAmount(
                                 item.amount
                             )}\n`;
 
@@ -2276,7 +2706,7 @@ private async sendAIResponse(
 
                         response +=
 
-                            `📊 Status: ${String(
+                            `ðŸ“Š Status: ${String(
                                 item.status
                             )}\n`;
 
@@ -2291,7 +2721,7 @@ private async sendAIResponse(
 
                         response +=
 
-                            `📦 Category: ${String(
+                            `ðŸ“¦ Category: ${String(
                                 item.category
                             )}\n`;
 
@@ -2306,7 +2736,7 @@ private async sendAIResponse(
 
                         response +=
 
-                            `📅 Date: ${this.formatBillDate(
+                            `ðŸ“… Date: ${this.formatBillDate(
                                 item.bill_date
                             )}\n`;
 
@@ -2380,7 +2810,7 @@ private async sendAIResponse(
 
         console.log(
 
-            "📤 WHATSAPP AI RESPONSE SENT",
+            "ðŸ“¤ WHATSAPP AI RESPONSE SENT",
 
             {
 
@@ -2403,7 +2833,7 @@ private async sendAIResponse(
 
         console.error(
 
-            "❌ AI RESPONSE ENGINE ERROR",
+            "âŒ AI RESPONSE ENGINE ERROR",
 
             this.normalizeError(error)
 
@@ -2498,7 +2928,7 @@ private truncateWhatsAppMessage(
 
         + "\n\n..."
 
-        + "\n📋 Response shortened. Please ask for specific records."
+        + "\nðŸ“‹ Response shortened. Please ask for specific records."
 
     );
 
@@ -2530,7 +2960,7 @@ private async logActivity(
 
             console.warn(
 
-                "⚠️ ACTIVITY LOG SKIPPED: company_id missing"
+                "âš ï¸ ACTIVITY LOG SKIPPED: company_id missing"
 
             );
 
@@ -2616,7 +3046,7 @@ private async logActivity(
 
         console.error(
 
-            "❌ WHATSAPP ACTIVITY LOG ERROR",
+            "âŒ WHATSAPP ACTIVITY LOG ERROR",
 
             this.normalizeError(error)
 
@@ -2670,7 +3100,7 @@ private async sendErrorMessage(
 
             normalizedPhone,
 
-            `❌ ${safeMessage}`
+            `âŒ ${safeMessage}`
 
         );
 
@@ -2680,7 +3110,7 @@ private async sendErrorMessage(
 
         console.error(
 
-            "❌ WHATSAPP ERROR MESSAGE FAILED",
+            "âŒ WHATSAPP ERROR MESSAGE FAILED",
 
             this.normalizeError(error)
 
@@ -2710,21 +3140,21 @@ private async sendErrorMessage(
 // FLOW:
 //
 // WhatsApp Image / PDF
-//        ↓
+//        â†“
 // Meta Media ID
-//        ↓
+//        â†“
 // OCRService
-//        ↓
+//        â†“
 // Normalize OCR
-//        ↓
+//        â†“
 // Validate Bill
-//        ↓
+//        â†“
 // BillService
-//        ↓
+//        â†“
 // Supabase
-//        ↓
+//        â†“
 // WhatsApp Confirmation
-//        ↓
+//        â†“
 // Activity Log
 //
 // IMPORTANT:
@@ -2875,7 +3305,7 @@ private async handleMediaMessage(
 
         console.log(
 
-            "📎 SHIVINFRA WHATSAPP MEDIA RECEIVED",
+            "ðŸ“Ž SHIVINFRA WHATSAPP MEDIA RECEIVED",
 
             {
 
@@ -2906,6 +3336,34 @@ private async handleMediaMessage(
 
 
         // =================================================
+        // SAVE MEDIA MESSAGE TO CHAT HISTORY
+        // =================================================
+
+        await saveConversation({
+
+            userId:
+                user.id ||
+                "unknown",
+
+            companyId:
+                user.company_id,
+
+            phone:
+                message.phone,
+
+            role:
+                "USER",
+
+            message:
+                `[Media: ${message.type}] ${message.filename || message.mimeType || "file"}`,
+
+            channel:
+                "WHATSAPP"
+
+        });
+
+
+        // =================================================
         // STEP 1
         // PROCESSING MESSAGE
         // =================================================
@@ -2914,8 +3372,8 @@ private async handleMediaMessage(
 
             message.phone,
 
-            "⏳ SHIVINFRA AI is processing your bill...\n\n" +
-            "🔍 Reading invoice details..."
+            "â³ SHIVINFRA AI is processing your bill...\n\n" +
+            "ðŸ” Reading invoice details..."
 
         );
 
@@ -3000,7 +3458,7 @@ private async handleMediaMessage(
 
         console.log(
 
-            "🔎 SHIVINFRA OCR RAW RESULT",
+            "ðŸ”Ž SHIVINFRA OCR RAW RESULT",
 
             ocrResult
 
@@ -3023,7 +3481,7 @@ private async handleMediaMessage(
 
         console.log(
 
-            "🧾 NORMALIZED BILL",
+            "ðŸ§¾ NORMALIZED BILL",
 
             normalizedBill
 
@@ -3048,7 +3506,7 @@ private async handleMediaMessage(
 
             console.warn(
 
-                "⚠️ OCR BILL VALIDATION FAILED",
+                "âš ï¸ OCR BILL VALIDATION FAILED",
 
                 {
 
@@ -3098,11 +3556,142 @@ private async handleMediaMessage(
             });
 
 
-            await this.sendErrorMessage(
+            const missingFields =
+                validation.errors;
+
+
+            const foundFields: string[] = [];
+
+
+            if (normalizedBill.vendor) {
+
+                foundFields.push(
+                    `Vendor = ${normalizedBill.vendor}`
+                );
+
+            }
+
+
+            if (
+                Number.isFinite(
+                    Number(
+                        normalizedBill.amount
+                    )
+                )
+
+                && Number(normalizedBill.amount) > 0
+            ) {
+
+                foundFields.push(
+                    `Amount = ₹${this.formatAmount(normalizedBill.amount)}`
+                );
+
+            }
+
+
+            if (normalizedBill.bill_date) {
+
+                foundFields.push(
+                    `Date = ${this.formatBillDate(normalizedBill.bill_date)}`
+                );
+
+            }
+
+
+            const response =
+                "I read the bill, but some details are missing.\n\n" +
+
+                (foundFields.length > 0
+                    ?
+                    "Found:\n"
+                    +
+                    foundFields.map(
+                        (f) => `• ${f}`
+                    ).join("\n")
+                    +
+                    "\n\n"
+                    : ""
+                ) +
+
+                "Missing:\n" +
+
+                missingFields
+                    .map(
+                        (e) => `• ${e}`
+                    ).join("\n") +
+
+                "\n\nPlease provide the missing details.";
+
+
+            const ocrKey =
+                getOCRConfirmationKey(
+                    message.phone,
+                    user.company_id
+                );
+
+
+            pendingOCRConfirmations.set(
+                ocrKey,
+                {
+
+                    billData:
+                        normalizedBill,
+
+                    phone:
+                        message.phone,
+
+                    companyId:
+                        user.company_id,
+
+                    missingFields:
+
+                        validation.errors,
+
+                    timestamp:
+                        Date.now()
+
+                }
+            );
+
+            await persistBillConfirmation(
+                message.phone,
+                user.company_id,
+                normalizedBill,
+                validation.errors
+            );
+
+
+            await saveConversation({
+
+                userId:
+                    user.id ||
+                    "unknown",
+
+                companyId:
+                    user.company_id,
+
+                phone:
+                    message.phone,
+
+                role:
+                    "AI",
+
+                message:
+                    response,
+
+                channel:
+                    "WHATSAPP"
+
+            });
+
+
+            await WhatsAppService.sendTextMessage(
 
                 message.phone,
 
-                "Bill details could not be verified. Please upload a clearer bill."
+                this.truncateWhatsAppMessage(
+                    response
+                )
 
             );
 
@@ -3159,6 +3748,9 @@ private async handleMediaMessage(
                     ? normalizedBill.description
                     : normalizedBill.category,
 
+            bill_file_url:
+                normalizedBill.file_url || null,
+
             ocr_text:
                 JSON.stringify(
                     normalizedBill
@@ -3175,7 +3767,7 @@ private async handleMediaMessage(
 
         console.log(
 
-            "💾 SHIVINFRA SAVING WHATSAPP BILL",
+            "ðŸ’¾ SHIVINFRA SAVING WHATSAPP BILL",
 
             {
 
@@ -3236,22 +3828,22 @@ private async handleMediaMessage(
 
 
         const confirmMessage =
-            "🧾 Bill Details:\n\n" +
-            `🏢 Vendor: ${
+            "ðŸ§¾ Bill Details:\n\n" +
+            `ðŸ¢ Vendor: ${
                 normalizedBill.vendor || "N/A"
             }\n` +
-            `🧾 Invoice: ${
+            `ðŸ§¾ Invoice: ${
                 normalizedBill.invoice_number || "N/A"
             }\n` +
-            `💰 Amount: ₹${
+            `ðŸ’° Amount: â‚¹${
                 this.formatAmount(
                     normalizedBill.amount
                 )
             }\n` +
-            `📦 Category: ${
+            `ðŸ“¦ Category: ${
                 normalizedBill.category || "MATERIAL"
             }\n` +
-            `📅 Date: ${
+            `ðŸ“… Date: ${
                 this.formatBillDate(
                     normalizedBill.bill_date
                 )
@@ -3289,11 +3881,10 @@ private async handleMediaMessage(
             }
 
         };
-            await billService.createBill(
-
-                billPayload
-
-            );
+            const bill =
+                await billService.createBill(
+                    billPayload
+                );
 
 
         // =================================================
@@ -3428,29 +4019,29 @@ private async handleMediaMessage(
 
         const response =
 
-            "✅ Bill Saved Successfully\n\n" +
+            "âœ… Bill Saved Successfully\n\n" +
 
-            `🏢 Vendor: ${
+            `ðŸ¢ Vendor: ${
                 normalizedBill.vendor || "N/A"
             }\n` +
 
-            `🧾 Invoice: ${
+            `ðŸ§¾ Invoice: ${
                 normalizedBill.invoice_number || "N/A"
             }\n` +
 
-            `💰 Amount: ₹${amountText}\n` +
+            `ðŸ’° Amount: â‚¹${amountText}\n` +
 
-            `📦 Category: ${
+            `ðŸ“¦ Category: ${
                 normalizedBill.category || "MATERIAL"
             }\n` +
 
-            `📅 Date: ${
+            `ðŸ“… Date: ${
                 this.formatBillDate(
                     normalizedBill.bill_date
                 )
             }\n\n` +
 
-            "💾 Saved into SHIVINFRA ERP.";
+            "ðŸ’¾ Saved into SHIVINFRA ERP.";
 
 
         await WhatsAppService.sendTextMessage(
@@ -3467,12 +4058,40 @@ private async handleMediaMessage(
 
 
         // =================================================
+        // SAVE AI RESPONSE TO CHAT HISTORY
+        // =================================================
+
+        await saveConversation({
+
+            userId:
+                user.id ||
+                "unknown",
+
+            companyId:
+                user.company_id,
+
+            phone:
+                message.phone,
+
+            role:
+                "AI",
+
+            message:
+                response,
+
+            channel:
+                "WHATSAPP"
+
+        });
+
+
+        // =================================================
         // SUCCESS LOG
         // =================================================
 
         console.log(
 
-            "✅ WHATSAPP BILL PROCESS COMPLETED",
+            "âœ… WHATSAPP BILL PROCESS COMPLETED",
 
             {
 
@@ -3519,7 +4138,7 @@ private async handleMediaMessage(
 
         console.error(
 
-            "❌ WHATSAPP MEDIA HANDLER ERROR",
+            "âŒ WHATSAPP MEDIA HANDLER ERROR",
 
             {
 
@@ -3594,6 +4213,31 @@ private async handleMediaMessage(
 
             );
 
+
+            await saveConversation({
+
+                userId:
+                    user?.id ||
+                    "unknown",
+
+                companyId:
+                    user?.company_id ||
+                    "",
+
+                phone:
+                    message.phone,
+
+                role:
+                    "AI",
+
+                message:
+                    "Bill processing failed. Please try again with a clear image or PDF.",
+
+                channel:
+                    "WHATSAPP"
+
+            });
+
         }
 
 
@@ -3619,11 +4263,11 @@ private async handleMediaMessage(
 // OCR PROCESSOR
 //
 // WhatsApp Media ID
-//       ↓
+//       â†“
 // OCRService
-//       ↓
+//       â†“
 // Gemini / Vision
-//       ↓
+//       â†“
 // Structured Invoice Data
 //
 // IMPORTANT:
@@ -3665,7 +4309,7 @@ private async processOCR(
 
         console.log(
 
-            "🔍 SHIVINFRA OCR START",
+            "ðŸ” SHIVINFRA OCR START",
 
             {
 
@@ -3684,6 +4328,8 @@ private async processOCR(
         // OCR SERVICE CALL
         // =================================================
         let tempFilePath: string | null = null;
+
+        let result: any = null;
 
 
         try {
@@ -3704,7 +4350,7 @@ private async processOCR(
 
 
                 console.warn(
-                    "⚠️ MEDIA DOWNLOAD FAILED - USING SIMULATION"
+                    "âš ï¸ MEDIA DOWNLOAD FAILED - USING SIMULATION"
                 );
 
 
@@ -3742,7 +4388,7 @@ private async processOCR(
 
 
             console.log(
-                "📥 MEDIA DOWNLOADED",
+                "ðŸ“¥ MEDIA DOWNLOADED",
                 {
                     media_id:
                         normalizedMediaId,
@@ -3759,8 +4405,8 @@ private async processOCR(
             // =================================================
 
 
-            const result =
-            await OCRService.extractInvoiceData(
+            result =
+                await OCRService.extractInvoiceData(
                 tempFilePath
             );
 
@@ -3769,7 +4415,7 @@ private async processOCR(
 
 
                 console.warn(
-                    "⚠️ OCR SERVICE RETURNED EMPTY RESULT"
+                    "âš ï¸ OCR SERVICE RETURNED EMPTY RESULT"
                 );
 
 
@@ -3780,12 +4426,62 @@ private async processOCR(
 
 
             console.log(
-                "✅ SHIVINFRA OCR COMPLETED",
+                "âœ… SHIVINFRA OCR COMPLETED",
                 {
                     media_id:
                         normalizedMediaId
                 }
             );
+
+
+            if (
+                tempFilePath &&
+                fs.existsSync(
+                    tempFilePath
+                )
+            ) {
+
+
+                const storagePath =
+                    `${normalizedMediaId}/${Date.now()}-${path.basename(tempFilePath)}`;
+
+
+                const { error: uploadError } =
+                    await supabase.storage
+                        .from("bills")
+                        .upload(
+                            storagePath,
+                            fs.createReadStream(
+                                tempFilePath
+                            ),
+                            {
+                                contentType:
+                                    normalizedType === "document"
+                                        ? "application/pdf"
+                                        : "image/jpeg",
+                                upsert: true,
+}
+);
+
+        if (!uploadError) {
+                    const { data } =
+                        supabase.storage
+                            .from("bills")
+                            .getPublicUrl(
+                                storagePath
+                            );
+
+
+                    (result as any).file_url =
+                        data.publicUrl;
+                } else {
+                    console.error(
+                        "[WHATSAPP BILL] Supabase Storage upload failed:",
+                        uploadError
+                    );
+                }
+
+            }
 
 
             return result;
@@ -3796,7 +4492,7 @@ private async processOCR(
 
 
             console.error(
-                "❌ OCR PROCESS ERROR",
+                "âŒ OCR PROCESS ERROR",
                 this.normalizeError(error)
             );
 
@@ -3835,7 +4531,7 @@ private async processOCR(
 
 
                     console.warn(
-                        "⚠️ TEMP FILE CLEANUP FAILED",
+                        "âš ï¸ TEMP FILE CLEANUP FAILED",
                         cleanupError
                     );
 
@@ -3855,7 +4551,7 @@ private async processOCR(
 
         console.error(
 
-            "❌ OCR PROCESS ERROR",
+            "âŒ OCR PROCESS ERROR",
 
             this.normalizeError(error)
 
@@ -3869,10 +4565,10 @@ private async processOCR(
 
 
 
-private simulateOCRResult(
-    mediaId: string,
-    type: string
-): any {
+    private async simulateOCRResult(
+        mediaId: string,
+        type: string
+    ): Promise<any> {
 
     const mockResult =
         OCRService.simulateOCR(
@@ -3883,19 +4579,336 @@ private simulateOCRResult(
         );
 
 
+    let fileUrl = "";
+
+
+    if (process.env.NODE_ENV !== "production") {
+
+
+        let ext =
+            type === "document"
+                ? ".pdf"
+                : ".jpg";
+
+
+        let tempSimPath =
+            path.join(
+                os.tmpdir(),
+                `shivinfra-ocr-sim-${mediaId}${ext}`
+            );
+
+
+        try {
+
+
+            if (type === "document") {
+
+
+                fs.writeFileSync(
+                    tempSimPath,
+                    Buffer.from(
+                        "%PDF-1.4\n1 0 obj\n<<\n/Type /Catalog\n/Pages 2 0 R\n>>\nendobj\n2 0 obj\n<<\n/Type /Pages\n/Kids [3 0 R]\n/Count 1\n>>\nendobj\n3 0 obj\n<<\n/Type /Page\n/Parent 2 0 R\n/MediaBox [0 0 200 200]\n>>\nendobj\nxref\n0 4\n0000000000 65535 f \n0000000009 00000 n \n0000000058 00000 n \n0000000115 00000 n \ntrailer\n<<\n/Size 4\n/Root 1 0 R\n>>\nstartxref\n190\n%%EOF"
+                    )
+                );
+
+
+            } else {
+
+
+                fs.writeFileSync(
+                    tempSimPath,
+                    Buffer.from([
+                        0xFF,
+                        0xD8,
+                        0xFF,
+                        0xE0,
+                        0x00,
+                        0x10,
+                        0x4A,
+                        0x46,
+                        0x49,
+                        0x46,
+                        0x00,
+                        0x01,
+                        0x01,
+                        0x00,
+                        0x00,
+                        0x01,
+                        0x00,
+                        0x01,
+                        0x00,
+                        0x00,
+                        0xFF,
+                        0xDB,
+                        0x00,
+                        0x43,
+                        0x00,
+                        0x08,
+                        0x06,
+                        0x06,
+                        0x07,
+                        0x06,
+                        0x05,
+                        0x08,
+                        0x07,
+                        0x07,
+                        0x07,
+                        0x09,
+                        0x09,
+                        0x08,
+                        0x0A,
+                        0x0C,
+                        0x14,
+                        0x0D,
+                        0x0C,
+                        0x0B,
+                        0x0B,
+                        0x0C,
+                        0x19,
+                        0x12,
+                        0x13,
+                        0x0F,
+                        0x14,
+                        0x1D,
+                        0x1A,
+                        0x1F,
+                        0x1E,
+                        0x1D,
+                        0x1A,
+                        0x1C,
+                        0x1C,
+                        0x20,
+                        0x24,
+                        0x2E,
+                        0x27,
+                        0x20,
+                        0x22,
+                        0x2C,
+                        0x23,
+                        0x1C,
+                        0x1C,
+                        0x28,
+                        0x37,
+                        0x29,
+                        0x2C,
+                        0x30,
+                        0x31,
+                        0x34,
+                        0x34,
+                        0x34,
+                        0x1F,
+                        0x27,
+                        0x39,
+                        0x3D,
+                        0x38,
+                        0x32,
+                        0x3C,
+                        0x2E,
+                        0x33,
+                        0x34,
+                        0x32,
+                        0xFF,
+                        0xC0,
+                        0x00,
+                        0x0B,
+                        0x08,
+                        0x00,
+                        0x01,
+                        0x00,
+                        0x01,
+                        0x01,
+                        0x01,
+                        0x11,
+                        0x00,
+                        0xFF,
+                        0xC4,
+                        0x00,
+                        0x14,
+                        0x00,
+                        0x01,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x03,
+                        0xFF,
+                        0xC4,
+                        0x00,
+                        0x14,
+                        0x10,
+                        0x01,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0x00,
+                        0xFF,
+                        0xDA,
+                        0x00,
+                        0x08,
+                        0x01,
+                        0x01,
+                        0x00,
+                        0x00,
+                        0x3F,
+                        0x00,
+                        0x7D,
+                        0x2C,
+                        0x0F,
+                        0xFF,
+                        0xD9
+                    ])
+                );
+
+
+            }
+
+
+            const storagePath =
+                `simulation/${Date.now()}-${path.basename(tempSimPath)}`;
+
+
+            const { error: uploadError } =
+                await supabase.storage
+                    .from("bills")
+                    .upload(
+                        storagePath,
+                        fs.createReadStream(
+                            tempSimPath
+                        ),
+                        {
+                            contentType:
+                                type === "document"
+                                    ? "application/pdf"
+                                    : "image/jpeg",
+                            upsert: true,
+                        }
+                    );
+
+
+            if (!uploadError) {
+
+
+                const { data } =
+                    supabase.storage
+                        .from("bills")
+                        .getPublicUrl(
+                            storagePath
+                        );
+
+
+                fileUrl = data.publicUrl;
+
+
+            } else {
+
+
+                console.error(
+                    "[WHATSAPP BILL] Simulation storage upload failed:",
+                    uploadError
+                );
+
+
+            }
+
+
+        } catch (simError) {
+
+
+            console.error(
+                "[WHATSAPP BILL] Simulation file handling failed:",
+                simError
+            );
+
+
+        } finally {
+
+
+            if (
+                fs.existsSync(
+                    tempSimPath
+                )
+            ) {
+
+
+                try {
+
+
+                    fs.unlinkSync(
+                        tempSimPath
+                    );
+
+
+                } catch (cleanupError) {
+
+
+                    console.warn(
+                        "âšï¸ SIMULATION TEMP FILE CLEANUP FAILED",
+                        cleanupError
+                    );
+
+
+                }
+
+
+            }
+
+
+        }
+
+
+    }
+
 
     console.log(
-        "🎭 SHIVINFRA OCR SIMULATION",
+        "ðŸŽ­ SHIVINFRA OCR SIMULATION",
         {
             media_id:
                 mediaId,
-            type
+            type,
+            file_url:
+                fileUrl || "none"
         }
     );
 
 
+    return {
 
-    return mockResult;
+
+        ...mockResult,
+
+
+        file_url:
+            fileUrl,
+
+
+        ocr_status:
+            "Success"
+
+
+    };
 
 
 
@@ -4374,8 +5387,8 @@ private validateOCRBill(
 // 1000
 // "1000"
 // "1,000"
-// "₹1,000"
-// "₹ 1,000.50"
+// "â‚¹1,000"
+// "â‚¹ 1,000.50"
 // "1000.50"
 // "INR 1000"
 // =====================================================
@@ -4446,7 +5459,7 @@ private parseAmount(
 
             cleaned
 
-                .replace(/₹/gi, "")
+                .replace(/â‚¹/gi, "")
 
                 .replace(/\bINR\b/gi, "")
 
@@ -4840,7 +5853,7 @@ private async logMediaActivity(
 
             console.warn(
 
-                "⚠️ MEDIA ACTIVITY LOG SKIPPED: company_id missing"
+                "âš ï¸ MEDIA ACTIVITY LOG SKIPPED: company_id missing"
 
             );
 
@@ -4919,7 +5932,7 @@ private async logMediaActivity(
 
         console.error(
 
-            "❌ WHATSAPP MEDIA ACTIVITY LOG ERROR",
+            "âŒ WHATSAPP MEDIA ACTIVITY LOG ERROR",
 
             this.normalizeError(error)
 
@@ -4973,10 +5986,10 @@ private async logMediaActivity(
 //
 // Therefore:
 //
-// ❌ AIService
-// ❌ AIActionService
-// ❌ OCR
-// ❌ Customer action
+// âŒ AIService
+// âŒ AIActionService
+// âŒ OCR
+// âŒ Customer action
 //
 // Only monitoring / logging.
 // =====================================================
@@ -5008,7 +6021,7 @@ public async handleStatusUpdate(
         if (!status) {
 
             console.log(
-                "ℹ️ No WhatsApp delivery status found"
+                "â„¹ï¸ No WhatsApp delivery status found"
             );
 
             return;
@@ -5045,7 +6058,7 @@ public async handleStatusUpdate(
         // =================================================
 
         console.log(
-            "📬 WHATSAPP DELIVERY STATUS",
+            "ðŸ“¬ WHATSAPP DELIVERY STATUS",
             {
                 message_id:
                     messageId,
@@ -5069,7 +6082,7 @@ public async handleStatusUpdate(
         ) {
 
             console.warn(
-                "⚠️ Invalid WhatsApp delivery status payload"
+                "âš ï¸ Invalid WhatsApp delivery status payload"
             );
 
             return;
@@ -5124,7 +6137,7 @@ public async handleStatusUpdate(
             if (!companyId) {
 
                 console.warn(
-                    "⚠️ Delivery status log skipped: DEFAULT_COMPANY_ID missing"
+                    "âš ï¸ Delivery status log skipped: DEFAULT_COMPANY_ID missing"
                 );
 
                 return;
@@ -5199,7 +6212,7 @@ public async handleStatusUpdate(
             // =================================================
 
             console.error(
-                "❌ WHATSAPP DELIVERY LOG ERROR",
+                "âŒ WHATSAPP DELIVERY LOG ERROR",
                 this.normalizeError(
                     logError
                 )
@@ -5217,7 +6230,7 @@ public async handleStatusUpdate(
         // =================================================
 
         console.error(
-            "❌ WHATSAPP STATUS UPDATE ERROR",
+            "âŒ WHATSAPP STATUS UPDATE ERROR",
             this.normalizeError(
                 error
             )
@@ -5237,12 +6250,12 @@ public async handleStatusUpdate(
 //
 // Request 1
 // wamid.ABC123
-//       ↓
+//       â†“
 // Process ADD_CUSTOMER
 //
 // Request 2
 // wamid.ABC123
-//       ↓
+//       â†“
 // Ignore
 //
 // IMPORTANT:
@@ -5281,71 +6294,6 @@ public async handleStatusUpdate(
 // Otherwise Meta retry could execute it again.
 // =====================================================
 
-private clearProcessedMessage(
-    messageId: string
-): void {
-
-    try {
-
-        const normalizedId =
-            String(
-                messageId || ""
-            ).trim();
-
-
-        if (!normalizedId) {
-
-            return;
-
-        }
-
-
-        // =================================================
-        // REMOVE CACHE ENTRY
-        // =================================================
-
-        this.processedMessages.delete(
-            normalizedId
-        );
-
-
-        // =================================================
-        // CLEAR TIMER
-        // =================================================
-
-        const timer =
-            this.duplicateCleanupTimers.get(
-                normalizedId
-            );
-
-
-        if (timer) {
-
-            clearTimeout(
-                timer
-            );
-
-
-            this.duplicateCleanupTimers.delete(
-                normalizedId
-            );
-
-        }
-
-    }
-
-    catch (error) {
-
-        console.error(
-            "❌ DUPLICATE CACHE CLEANUP ERROR",
-            this.normalizeError(
-                error
-            )
-        );
-
-    }
-
-}
 
 
 // =====================================================
@@ -5458,7 +6406,7 @@ public async handleError(
         // =================================================
 
         console.error(
-            "🔥 SHIVINFRA WHATSAPP GLOBAL ERROR",
+            "ðŸ”¥ SHIVINFRA WHATSAPP GLOBAL ERROR",
             this.normalizeError(
                 error
             )
@@ -5482,7 +6430,7 @@ public async handleError(
         if (!normalizedPhone) {
 
             console.error(
-                "❌ Cannot send WhatsApp error response: phone missing"
+                "âŒ Cannot send WhatsApp error response: phone missing"
             );
 
             return;
@@ -5510,7 +6458,7 @@ public async handleError(
 
                 normalizedPhone,
 
-                "❌ SHIVINFRA AI is temporarily unavailable.\n\n" +
+                "âŒ SHIVINFRA AI is temporarily unavailable.\n\n" +
                 "Please try again in a moment."
 
             );
@@ -5520,7 +6468,7 @@ public async handleError(
         catch (sendError) {
 
             console.error(
-                "❌ WHATSAPP GLOBAL ERROR RESPONSE SEND FAILED",
+                "âŒ WHATSAPP GLOBAL ERROR RESPONSE SEND FAILED",
                 this.normalizeError(
                     sendError
                 )
@@ -5537,7 +6485,7 @@ public async handleError(
         // =================================================
 
         console.error(
-            "🔥 GLOBAL WHATSAPP ERROR HANDLER FAILED",
+            "ðŸ”¥ GLOBAL WHATSAPP ERROR HANDLER FAILED",
             this.normalizeError(
                 handlerError
             )
@@ -5556,100 +6504,6 @@ public async handleError(
 //
 // =====================================================
 
-private normalizeError(
-    error: unknown
-): {
-
-    message: string;
-
-    name?: string;
-
-    stack?: string;
-
-} {
-
-    // =================================================
-    // STANDARD ERROR
-    // =================================================
-
-    if (
-        error instanceof Error
-    ) {
-
-        return {
-
-            message:
-                error.message,
-
-            name:
-                error.name,
-
-            stack:
-
-                process.env.NODE_ENV ===
-                "production"
-
-                    ? undefined
-
-                    : error.stack
-
-        };
-
-    }
-
-
-    // =================================================
-    // STRING ERROR
-    // =================================================
-
-    if (
-        typeof error === "string"
-    ) {
-
-        return {
-
-            message:
-                error
-
-        };
-
-    }
-
-
-    // =================================================
-    // OBJECT ERROR
-    // =================================================
-
-    try {
-
-        const serialized =
-            JSON.stringify(
-                error
-            );
-
-
-        return {
-
-            message:
-                serialized ||
-                "Unknown error"
-
-        };
-
-    }
-
-    catch {
-
-        return {
-
-            message:
-                "Unknown error"
-
-        };
-
-    }
-
-}
 
 
 // =====================================================
@@ -5735,6 +6589,102 @@ private getDuplicateCacheStatus() {
 
 }
 
+    // =================================================
+    // MULTI-TENANT: Extract Meta phone_number_id from
+    // webhook payload
+    // =================================================
+    private extractPhoneNumberId(payload: any): string | null {
+        try {
+            const phoneId =
+                payload
+                    ?.entry?.[0]
+                    ?.changes?.[0]
+                    ?.metadata
+                    ?.phone_number_id;
+            if (phoneId) {
+                return String(phoneId).trim();
+            }
+            return null;
+        } catch {
+            return null;
+        }
+    }
+
+    // =================================================
+    // MULTI-TENANT: Resolve company by Meta phone
+    // number ID via settings.meta_phone_id
+    // =================================================
+    private async resolveCompanyByPhoneId(
+        phoneId: string
+    ): Promise<{ id: string; phone_number_id: string | null } | null> {
+        try {
+            const { data, error } = await supabase
+                .from("settings")
+                .select("company_id, meta_phone_id")
+                .eq("meta_phone_id", phoneId)
+                .limit(1)
+                .maybeSingle();
+
+            if (error || !data) {
+                // Idempotent bootstrap: map the configured
+                // META_WHATSAPP_PHONE_NUMBER_ID to the default
+                // company if no mapping exists yet. This only
+                // applies to the configured phone number ID, never
+                // to arbitrary unknown IDs.
+                const configuredPhoneId = String(
+                    process.env.META_WHATSAPP_PHONE_NUMBER_ID || ""
+                ).trim();
+                const configuredCompany = String(
+                    process.env.DEFAULT_COMPANY_ID || ""
+                ).trim();
+
+                if (
+                    phoneId === configuredPhoneId &&
+                    configuredPhoneId &&
+                    configuredCompany
+                ) {
+                    await supabase
+                        .from("settings")
+                        .upsert(
+                            {
+                                company_id: configuredCompany,
+                                meta_phone_id: configuredPhoneId,
+                                whatsapp_enabled: true
+                            },
+                            { on_conflict: "company_id" }
+                        )
+                        .select("company_id, meta_phone_id")
+                        .maybeSingle();
+
+                    const { data: retry } = await supabase
+                        .from("settings")
+                        .select("company_id, meta_phone_id")
+                        .eq("meta_phone_id", phoneId)
+                        .limit(1)
+                        .maybeSingle();
+
+                    if (retry) {
+                        return {
+                            id: retry.company_id,
+                            phone_number_id: retry.meta_phone_id || phoneId
+                        };
+                    }
+                }
+
+                console.log("[SHIVINFRA WHATSAPP] No company mapped to phone_number_id:", phoneId);
+                return null;
+            }
+
+            return {
+                id: data.company_id,
+                phone_number_id: data.meta_phone_id || phoneId
+            };
+        } catch (error) {
+            console.error("[SHIVINFRA WHATSAPP] resolveCompanyByPhoneId error:", error);
+            return null;
+        }
+    }
+}
 
 // =====================================================
 // PART 4 / 5 END
@@ -5743,7 +6693,7 @@ private getDuplicateCacheStatus() {
 //
 // Do NOT add:
 //
-// }
+// 
 // const whatsappWebhookService = ...
 // export default ...
 //
@@ -5761,21 +6711,6 @@ private getDuplicateCacheStatus() {
 //
 // =====================================================
 
-
-// =====================================================
-// CLASS CLOSURE
-//
-// IMPORTANT:
-// All methods from PART 1 / 5
-// PART 2 / 5
-// PART 3 / 5
-// PART 4 / 5
-// are inside this class.
-//
-// This is the ONLY final class closing brace.
-// =====================================================
-
-}
 
 
 // =====================================================

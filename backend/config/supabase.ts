@@ -28,6 +28,15 @@ export const isSupabaseConfigured = !!(
     supabaseUrl.startsWith("https://")
 );
 
+if (
+    process.env.NODE_ENV === "production" &&
+    !isSupabaseConfigured
+) {
+    throw new Error(
+        "SUPABASE_URL and SUPABASE_ANON_KEY are required in production. Application startup aborted."
+    );
+}
+
 let supabaseInstance:any = null;
 
 let supabaseAdminInstance:any = null;

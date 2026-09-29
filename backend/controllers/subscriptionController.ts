@@ -14,7 +14,7 @@ export class SubscriptionController {
       if (isSupabaseConfigured) {
         const { data, error } = await supabase
           .from("companies")
-          .select("id, company_name, subscription_plan, subscription_start, subscription_end, status")
+          .select("id, company_name, subscription_plan, subscription_status, created_at, updated_at")
           .eq("id", companyId)
           .single();
 

@@ -14,22 +14,44 @@ const storage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    const safeFieldname = file.fieldname.replace(/[^a-zA-Z0-9_-]/g, "");
     cb(
       null,
-      file.fieldname + "-" + uniqueSuffix + path.extname(file.originalname)
+      safeFieldname + "-" + uniqueSuffix + path.extname(file.originalname)
     );
   },
 });
 
+const ALLOWED_EXTENSIONS = [".png", ".jpg", ".jpeg", ".pdf", ".docx", ".xlsx"];
+
+const MIME_TYPE_MAP: Record<string, string[]> = {
+  ".png": ["image/png"],
+  ".jpg": ["image/jpeg", "image/jpg"],
+  ".jpeg": ["image/jpeg", "image/jpg"],
+  ".pdf": ["application/pdf"],
+  ".docx": [
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/zip"
+  ],
+  ".xlsx": [
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/zip"
+  ]
+};
+
 const fileFilter = (req: any, file: Express.Multer.File, cb: any) => {
-  const allowedExtensions = [".png", ".jpg", ".jpeg", ".pdf", ".docx", ".xlsx"];
   const ext = path.extname(file.originalname).toLowerCase();
   
-  if (allowedExtensions.includes(ext)) {
-    cb(null, true);
-  } else {
-    cb(new Error("File extension not permitted. Supported extensions: PNG, JPG, JPEG, PDF, DOCX, XLSX."));
+  if (!ALLOWED_EXTENSIONS.includes(ext)) {
+    return cb(new Error("File extension not permitted. Supported extensions: PNG, JPG, JPEG, PDF, DOCX, XLSX."), false);
   }
+
+  const allowedMimes = MIME_TYPE_MAP[ext];
+  if (!allowedMimes || !allowedMimes.includes(file.mimetype)) {
+    return cb(new Error(`MIME type '${file.mimetype}' does not match file extension '${ext}'.`), false);
+  }
+
+  cb(null, true);
 };
 
 export const upload = multer({
